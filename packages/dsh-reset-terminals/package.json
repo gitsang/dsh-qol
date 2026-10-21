@@ -1,0 +1,52 @@
+{
+  "name": "@gitsang/dsh-reset-terminals",
+  "description": "Close an agent's persistent PTY sessions before changing its sandbox mode, from a slash command or a composer button.",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./client": {
+      "default": "./src/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "terminal",
+    "sandbox"
+  ],
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gitsang/dsh-qol.git",
+    "directory": "packages/dsh-reset-terminals"
+  },
+  "homepage": "https://github.com/gitsang/dsh-qol/tree/main/packages/dsh-reset-terminals#readme",
+  "bugs": {
+    "url": "https://github.com/gitsang/dsh-qol/issues"
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "name": "@gitsang/dsh-statusline",
+  "version": "0.2.0",
+  "description": "A DSH statusline that keeps the shipped statistics pills and splits model time into first-token wait and decode.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "icon": "./icon.svg",
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./src/client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "src",
+    "locale",
+    "icon.svg",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gitsang/dsh-qol.git",
+    "directory": "packages/dsh-statusline"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "statusline",
+    "session-stats",
+    "ttft",
+    "prefill",
+    "decode",
+    "tps"
+  ],
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "homepage": "https://github.com/gitsang/dsh-qol/tree/main/packages/dsh-statusline#readme",
+  "bugs": {
+    "url": "https://github.com/gitsang/dsh-qol/issues"
+  }
+}

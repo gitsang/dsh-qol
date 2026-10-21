@@ -1,0 +1,44 @@
+{
+  "name": "@gitsang/dsh-no-preview-notice",
+  "version": "0.1.0",
+  "description": "Skip the DSH 0.2 preview welcome notice on the new-session page, keeping the Models settings page intact.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./src/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gitsang/dsh-qol.git",
+    "directory": "packages/dsh-no-preview-notice"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "onboarding"
+  ],
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4",
+    "react": "^18.2.0"
+  },
+  "homepage": "https://github.com/gitsang/dsh-qol/tree/main/packages/dsh-no-preview-notice#readme",
+  "bugs": {
+    "url": "https://github.com/gitsang/dsh-qol/issues"
+  }
+}

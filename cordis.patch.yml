@@ -1,0 +1,20 @@
+# @gitsang/dsh-qol bundle patch.
+#
+# One row per quality-of-life component. Each row names an independent package
+# under packages/ and stays independently switchable on the Plugins page.
+- insert:
+    - id: enter-swap
+      name: '@gitsang/dsh-enter-swap'
+
+    - id: no-preview-notice
+      name: '@gitsang/dsh-no-preview-notice'
+
+    - id: permission-auto
+      name: '@gitsang/dsh-permission-auto'
+
+    - id: reset-terminals
+      name: '@gitsang/dsh-reset-terminals'
+      inject: [commands]
+
+    - id: statusline
+      name: '@gitsang/dsh-statusline'

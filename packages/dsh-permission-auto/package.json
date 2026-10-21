@@ -1,0 +1,43 @@
+{
+  "name": "@gitsang/dsh-permission-auto",
+  "version": "0.1.0",
+  "description": "Offer the experimental Auto review permission preset as a new-session default in Settings > Permission, without hard-wiring it.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "permission",
+    "auto-review"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gitsang/dsh-qol.git",
+    "directory": "packages/dsh-permission-auto"
+  },
+  "homepage": "https://github.com/gitsang/dsh-qol/tree/main/packages/dsh-permission-auto#readme",
+  "bugs": {
+    "url": "https://github.com/gitsang/dsh-qol/issues"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

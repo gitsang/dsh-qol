@@ -1,0 +1,60 @@
+# @gitsang/dsh-qol
+
+面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的顺手工具箱：**一个插件，五个可独立开关的组件**。
+
+`QOL` 是 **Quality of Life** 的缩写，指日常使用体验上的小改进，而不是新的核心功能。
+
+## 包含的组件
+
+| 组件 | 包名 | 作用 |
+| --- | --- | --- |
+| 回车键交换 | `@gitsang/dsh-enter-swap` | Enter 换行，Ctrl/Cmd+Enter 发送。 |
+| 跳过预览提示 | `@gitsang/dsh-no-preview-notice` | 跳过新会话页的版本预览提示。 |
+| Auto review 默认值 | `@gitsang/dsh-permission-auto` | 在权限设置中提供实验性的 Auto review 新会话默认值。 |
+| 重置终端 | `@gitsang/dsh-reset-terminals` | 提供 `/reset-terminals` 和输入框按钮，在切换权限前关闭持久 PTY 会话。 |
+| 状态栏 | `@gitsang/dsh-statusline` | 保留原统计胶囊，并把模型用时拆成首 token 等待与输出时间。 |
+
+只有 `@gitsang/dsh-qol` 是安装进 profile 的 bundle。五个组件包是它的依赖，并且**刻意不再声明自己的 `dsh.bundle`**。总 bundle 的 patch 为每个组件插入一条 Loader row，所以在 **插件 → @gitsang/dsh-qol → 包含的组件** 里可以看到五个独立开关。
+
+## 安装
+
+### 从本地 checkout 安装
+
+```bash
+git clone git@github.com:gitsang/dsh-qol.git ~/src/github.com/gitsang/dsh-qol
+cd ~/src/github.com/gitsang/dsh-qol
+pnpm install
+dsh plugin --profile web add ~/src/github.com/gitsang/dsh-qol
+```
+
+然后把 `@gitsang/dsh-qol` 加进 `~/.dsh/profiles/web/package.json` 的 `dsh.profile.bundles`，或者在插件页面里打开它。
+
+### 从 npm 安装
+
+包发布后：
+
+```bash
+dsh plugin --profile web add @gitsang/dsh-qol
+```
+
+## 单独启停组件
+
+打开 **插件 → @gitsang/dsh-qol**。详情页会列出这个 bundle 的 Loader rows，每一行都可以单独开关，互不影响；bundle 总开关会一次关闭全部五个组件。
+
+前提：
+
+- `@gitsang/dsh-permission-auto` 需要同时启用 `@deepseek-ai/dsh-experimental-auto-review`；
+- `@gitsang/dsh-statusline` 只读取现有的 session projection，不需要 Host 端逻辑。
+
+## 开发
+
+```bash
+pnpm install
+pnpm -r --if-present test
+```
+
+各组件保留原来的包名、版本、测试和 README。旧的独立仓库已归档，git 历史仍保留在对应的 `gitsang/dsh-*` 仓库中。
+
+## License
+
+MIT

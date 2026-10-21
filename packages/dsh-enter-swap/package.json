@@ -1,0 +1,44 @@
+{
+  "name": "@gitsang/dsh-enter-swap",
+  "version": "0.1.0",
+  "description": "Swap the DSH web composer's Enter behaviours: Enter inserts a newline, Ctrl/Cmd+Enter sends.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./src/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "keyboard",
+    "composer"
+  ],
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gitsang/dsh-qol.git",
+    "directory": "packages/dsh-enter-swap"
+  },
+  "homepage": "https://github.com/gitsang/dsh-qol/tree/main/packages/dsh-enter-swap#readme",
+  "bugs": {
+    "url": "https://github.com/gitsang/dsh-qol/issues"
+  }
+}

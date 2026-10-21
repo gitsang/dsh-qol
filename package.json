@@ -1,0 +1,61 @@
+{
+  "name": "@gitsang/dsh-qol",
+  "version": "0.1.0",
+  "description": "A quality-of-life bundle for DeepSeek Harness: Enter-key swap, statusline, onboarding skip, Auto review default, and terminal reset.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gitsang/dsh-qol.git"
+  },
+  "homepage": "https://github.com/gitsang/dsh-qol#readme",
+  "bugs": {
+    "url": "https://github.com/gitsang/dsh-qol/issues"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "quality-of-life",
+    "statusline",
+    "composer",
+    "permission",
+    "terminal",
+    "onboarding"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "@gitsang/dsh-enter-swap": "workspace:^",
+    "@gitsang/dsh-no-preview-notice": "workspace:^",
+    "@gitsang/dsh-permission-auto": "workspace:^",
+    "@gitsang/dsh-reset-terminals": "workspace:^",
+    "@gitsang/dsh-statusline": "workspace:^"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4"
+  },
+  "scripts": {
+    "test": "pnpm -r --if-present test",
+    "release": "pnpm -r publish --access public --no-git-checks"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
