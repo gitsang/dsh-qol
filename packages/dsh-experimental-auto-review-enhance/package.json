@@ -1,5 +1,5 @@
 {
-  "name": "@gitsang/dsh-permission-auto",
+  "name": "@gitsang/dsh-experimental-auto-review-enhance",
   "version": "0.1.0",
   "description": "Offer the experimental Auto review permission preset as a new-session default in Settings > Permission, without hard-wiring it.",
   "license": "MIT",
@@ -25,9 +25,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/gitsang/dsh-qol.git",
-    "directory": "packages/dsh-permission-auto"
+    "directory": "packages/dsh-experimental-auto-review-enhance"
   },
-  "homepage": "https://github.com/gitsang/dsh-qol/tree/main/packages/dsh-permission-auto#readme",
+  "homepage": "https://github.com/gitsang/dsh-qol/tree/main/packages/dsh-experimental-auto-review-enhance#readme",
   "bugs": {
     "url": "https://github.com/gitsang/dsh-qol/issues"
   },

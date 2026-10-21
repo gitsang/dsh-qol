@@ -14,15 +14,18 @@ importers:
       '@gitsang/dsh-enter-swap':
         specifier: workspace:^
         version: link:packages/dsh-enter-swap
+      '@gitsang/dsh-experimental-auto-review-enhance':
+        specifier: workspace:^
+        version: link:packages/dsh-experimental-auto-review-enhance
       '@gitsang/dsh-no-preview-notice':
         specifier: workspace:^
         version: link:packages/dsh-no-preview-notice
-      '@gitsang/dsh-permission-auto':
-        specifier: workspace:^
-        version: link:packages/dsh-permission-auto
       '@gitsang/dsh-reset-terminals':
         specifier: workspace:^
         version: link:packages/dsh-reset-terminals
+      '@gitsang/dsh-session-tree':
+        specifier: workspace:^
+        version: link:packages/dsh-session-tree
       '@gitsang/dsh-statusline':
         specifier: workspace:^
         version: link:packages/dsh-statusline
@@ -31,6 +34,12 @@ importers:
     dependencies:
       '@deepseek-ai/cordis':
         specifier: ~4.0.4
+        version: 4.0.5
+
+  packages/dsh-experimental-auto-review-enhance:
+    dependencies:
+      '@deepseek-ai/cordis':
+        specifier: ^4.0.4
         version: 4.0.5
 
   packages/dsh-no-preview-notice:
@@ -42,17 +51,23 @@ importers:
         specifier: ^18.2.0
         version: 18.3.1
 
-  packages/dsh-permission-auto:
-    dependencies:
-      '@deepseek-ai/cordis':
-        specifier: ^4.0.4
-        version: 4.0.5
-
   packages/dsh-reset-terminals:
     dependencies:
       '@deepseek-ai/cordis':
         specifier: ^4.0.4
         version: 4.0.5
+
+  packages/dsh-session-tree:
+    dependencies:
+      '@deepseek-ai/cordis':
+        specifier: ~4.0.4
+        version: 4.0.5
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.2.0
+        version: 18.3.1(react@18.3.1)
 
   packages/dsh-statusline:
     dependencies:

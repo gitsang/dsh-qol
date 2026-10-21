@@ -1,4 +1,4 @@
-# dsh-permission-auto
+# dsh-experimental-auto-review-enhance
 
 让内置的 **Auto review** 权限预设出现在 **设置 → 权限**（新会话默认权限）下拉框里，
 同时不把 Auto review 写死成唯一默认值。选「仅可查看」「工作区内修改」「完全权限」时
@@ -35,7 +35,7 @@
 选择保存在：
 
 ```text
-$DSH_HOME/permission-auto/<profile>.json
+$DSH_HOME/experimental-auto-review-enhance/<profile>.json
 ```
 
 切回普通预设时插件会自动清空它，并把写入交回官方服务。
@@ -59,7 +59,7 @@ dsh plugin --profile web add @gitsang/dsh-qol
 在 `@gitsang/dsh-qol` 的插件详情页里关闭这个组件即可。如果还想清掉已保存的选择：
 
 ```bash
-rm -rf ~/.dsh/permission-auto
+rm -rf ~/.dsh/experimental-auto-review-enhance
 ```
 
 ## 范围与限制
@@ -75,17 +75,18 @@ rm -rf ~/.dsh/permission-auto
   控件里的 Auto 弹）；想要确认请用 `/permission auto`。
 - 包装的是宿主实例方法和 `session/created` 时机，不是公开扩展点；DSH 升级后若
   `catalog` / `settings.describe` / `pinInitialPermission` 改名会静默失效
-  （日志里有 `permission-auto:` warning），但不会破坏启动。升级后发现新会话不再
+  （日志里有 `experimental-auto-review-enhance:` warning），但不会破坏启动。升级后发现新会话不再
   进 Auto，先查宿主日志里的这个前缀。
 
 ## 排错
 
 - **设置里能看到 Auto review，但新建会话仍是原权限。** 说明宿主加载的是旧版本
   插件。更新并重启：
-  `cd ~/.dsh/profiles/web && pnpm update @gitsang/dsh-permission-auto`，
+  `cd ~/.dsh/profiles/web && pnpm update @gitsang/dsh-experimental-auto-review-enhance`，
   然后重启 `dsh web`。
-- **状态文件位置。** 选择按 profile 保存；包改名后状态目录也跟着改名，从旧包升级
-  后需要重新在设置里选一次 Auto review。
+- **状态文件位置。** 选择按 profile 保存在
+  `$DSH_HOME/experimental-auto-review-enhance/<profile>.json`；旧包
+  `permission-auto` 保存的选择仍会被读取，下一次写入会使用新目录。
 
 ## 验证
 

@@ -1,5 +1,5 @@
 /**
- * dsh-permission-auto
+ * dsh-experimental-auto-review-enhance
  *
  * Make the experimental `auto` permission preset (Auto review) selectable in
  * the shipped Settings > Permission "default for new sessions" row, without
@@ -30,7 +30,7 @@
  *     to `auto`.
  *
  * The Auto/not-Auto choice lives in a small per-profile JSON file under
- * `$DSH_HOME/permission-auto/<profile>.json`. That keeps this plugin
+ * `$DSH_HOME/experimental-auto-review-enhance/<profile>.json`. That keeps this plugin
  * out of the permission Config entirely: no duplicate source of truth, no
  * unsupported enum value, and switching back to Read Only just deletes the
  * file and writes the normal preset through the official service.
@@ -49,13 +49,13 @@
  * shipped settings code itself relies on are used. Every failure is logged and
  * swallowed: this plugin must never be able to veto a session or a boot.
  *
- * @module @gitsang/dsh-permission-auto
+ * @module @gitsang/dsh-experimental-auto-review-enhance
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 /** Cordis plugin name used by loader diagnostics. */
-export const name = 'permission-auto';
+export const name = 'experimental-auto-review-enhance';
 
 /** The permission preset service must exist before anything can be offered. */
 export const inject = ['permissionPresets'];
@@ -73,7 +73,7 @@ const AUTO_OPTION = {
 };
 
 /** Marks a service instance this plugin already wrapped. */
-const WRAPPED = Symbol.for('dsh-permission-auto/wrapped');
+const WRAPPED = Symbol.for('dsh-experimental-auto-review-enhance/wrapped');
 
 /** Render one unknown thrown value as text. */
 function describeError(error) {
@@ -83,17 +83,17 @@ function describeError(error) {
 /** Log one line; logging must never be able to veto anything. */
 function log(ctx, level, message) {
   try {
-    ctx.logger?.[level]?.(`permission-auto: ${message}`);
+    ctx.logger?.[level]?.(`experimental-auto-review-enhance: ${message}`);
   } catch {
     /* a logger failure is never a reason to fail a session */
   }
 }
 
-/** State directory name; a renamed package must not silently drop a saved choice. */
-const STATE_DIR = 'permission-auto';
+/** Current state directory; a renamed package must not silently drop a saved choice. */
+const STATE_DIR = 'experimental-auto-review-enhance';
 
-/** Pre-rename state directory, read only when the current one has no file. */
-const LEGACY_STATE_DIR = 'permission-auto-default';
+/** State directories from earlier names, read only when the current one has no file. */
+const LEGACY_STATE_DIRS = ['permission-auto', 'permission-auto-default'];
 
 /** Resolve the Harness home and profile name, or `null` when unavailable. */
 function stateHomeOf(ctx) {
@@ -115,19 +115,22 @@ function statePathOf(ctx) {
   return resolved === null ? null : join(resolved.home, STATE_DIR, `${resolved.profile}.json`);
 }
 
-/** Pre-rename state path, or `null` when the profile layout is unavailable. */
-function legacyStatePathOf(ctx) {
+/** Pre-rename state paths, in newest-to-oldest order. */
+function legacyStatePathsOf(ctx) {
   const resolved = stateHomeOf(ctx);
-  return resolved === null ? null : join(resolved.home, LEGACY_STATE_DIR, `${resolved.profile}.json`);
+  return resolved === null
+    ? []
+    : LEGACY_STATE_DIRS.map((directory) => join(resolved.home, directory, `${resolved.profile}.json`));
 }
 
 /** Read the stored choice; any unreadable state means "not Auto". */
 function readState(ctx) {
   try {
     const current = statePathOf(ctx);
-    const legacy = legacyStatePathOf(ctx);
-    const path = current !== null && existsSync(current) ? current : legacy;
-    if (path === null || !existsSync(path)) return false;
+    const path = current !== null && existsSync(current)
+      ? current
+      : legacyStatePathsOf(ctx).find((candidate) => existsSync(candidate));
+    if (path === undefined) return false;
     const parsed = JSON.parse(readFileSync(path, 'utf8'));
     return parsed?.defaultPreset === AUTO_PRESET;
   } catch (error) {
@@ -410,5 +413,5 @@ export function apply(ctx) {
         /* marker only */
       }
     };
-  }, 'permission-auto: Settings integration');
+  }, 'experimental-auto-review-enhance: Settings integration');
 }

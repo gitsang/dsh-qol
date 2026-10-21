@@ -1,0 +1,62 @@
+{
+  "name": "@gitsang/dsh-session-tree",
+  "version": "0.1.0",
+  "description": "A Tree View tab for DSH conversations: browse branch lineage, fork from any durable event, and edit a sent message to branch from before its Turn.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./src/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "session-tree",
+    "branch",
+    "fork",
+    "message-edit",
+    "tree-view"
+  ],
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-chat",
+        "@deepseek-ai/dsh-client-ui-workspace"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gitsang/dsh-qol.git",
+    "directory": "packages/dsh-session-tree"
+  },
+  "homepage": "https://github.com/gitsang/dsh-qol/tree/main/packages/dsh-session-tree#readme",
+  "bugs": {
+    "url": "https://github.com/gitsang/dsh-qol/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -14,7 +14,7 @@ import { apply, name } from '../src/index.js';
  */
 function makeContext(options = {}) {
   const calls = [];
-  const home = options.home ?? mkdtempSync(join(tmpdir(), 'dsh-permission-auto-'));
+  const home = options.home ?? mkdtempSync(join(tmpdir(), 'dsh-experimental-auto-review-enhance-'));
   const state = { preset: null, sandbox: null, approval: null, seeded: false };
   const presets = {
     autoAdmit: options.autoAdmit ?? true,
@@ -97,7 +97,7 @@ function resetFacts(state) {
 }
 
 test('registers under the expected Cordis name', () => {
-  assert.equal(name, 'permission-auto');
+  assert.equal(name, 'experimental-auto-review-enhance');
 });
 
 test('offers Auto review as a future-session default and announces the change', () => {
@@ -117,7 +117,7 @@ test('a stored Auto choice is reported back through settings.describe()', async 
   const row = settings.describe().find((candidate) => candidate.ns === 'permission');
   assert.equal(row.value.defaultPreset, 'auto');
   assert.equal(presets.catalog().defaultPreset, 'auto');
-  assert.equal(JSON.parse(readFileSync(join(home, 'permission-auto', 'web.json'), 'utf8')).defaultPreset, 'auto');
+  assert.equal(JSON.parse(readFileSync(join(home, 'experimental-auto-review-enhance', 'web.json'), 'utf8')).defaultPreset, 'auto');
 });
 
 test('choosing Auto never reaches the permission namespace', async () => {
@@ -132,7 +132,7 @@ test('the merge-style update() path is intercepted too', async () => {
   apply(ctx);
   await settings.update('permission', { defaultPreset: 'auto' }, 7);
   assert.equal(calls.filter(([kind]) => kind === 'update').length, 0);
-  assert.equal(JSON.parse(readFileSync(join(home, 'permission-auto', 'web.json'), 'utf8')).defaultPreset, 'auto');
+  assert.equal(JSON.parse(readFileSync(join(home, 'experimental-auto-review-enhance', 'web.json'), 'utf8')).defaultPreset, 'auto');
 });
 
 test('switching back to a normal preset clears the stored choice and delegates the write', async () => {
@@ -143,7 +143,7 @@ test('switching back to a normal preset clears the stored choice and delegates t
   const delegated = calls.filter(([kind]) => kind === 'mutate');
   assert.equal(delegated.length, 1);
   assert.equal(delegated[0][2][0].value, 'read-only');
-  assert.equal(JSON.parse(readFileSync(join(home, 'permission-auto', 'web.json'), 'utf8')).defaultPreset, '');
+  assert.equal(JSON.parse(readFileSync(join(home, 'experimental-auto-review-enhance', 'web.json'), 'utf8')).defaultPreset, '');
   assert.equal(settings.describe()[0].value.defaultPreset, 'workspace-write');
 });
 
@@ -236,14 +236,14 @@ test('a stored Auto choice degrades to the real default when the integration dis
   presets.autoAdmit = false;
   assert.equal(settings.describe()[0].value.defaultPreset, 'workspace-write');
   assert.equal(presets.catalog().defaultPreset, 'workspace-write');
-  assert.equal(JSON.parse(readFileSync(join(home, 'permission-auto', 'web.json'), 'utf8')).defaultPreset, 'auto', 'the choice is remembered, not erased');
+  assert.equal(JSON.parse(readFileSync(join(home, 'experimental-auto-review-enhance', 'web.json'), 'utf8')).defaultPreset, 'auto', 'the choice is remembered, not erased');
 });
 
 test('an unreadable state file falls back to stock behavior', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'dsh-permission-auto-'));
+  const home = mkdtempSync(join(tmpdir(), 'dsh-experimental-auto-review-enhance-'));
   const { mkdirSync } = await import('node:fs');
-  mkdirSync(join(home, 'permission-auto'), { recursive: true });
-  writeFileSync(join(home, 'permission-auto', 'web.json'), '{not json');
+  mkdirSync(join(home, 'experimental-auto-review-enhance'), { recursive: true });
+  writeFileSync(join(home, 'experimental-auto-review-enhance', 'web.json'), '{not json');
   const { ctx, presets } = makeContext({ home });
   apply(ctx);
   assert.equal(presets.catalog().defaultPreset, 'workspace-write');
@@ -275,7 +275,7 @@ test('disposal restores the wrapped services', () => {
 });
 
 test('an absent settings service leaves the catalog feature alive', () => {
-  const home = mkdtempSync(join(tmpdir(), 'dsh-permission-auto-'));
+  const home = mkdtempSync(join(tmpdir(), 'dsh-experimental-auto-review-enhance-'));
   const presets = {
     names: ['workspace-write', 'auto'],
     catalog: () => ({ options: [], defaultOptions: [], defaultPreset: 'workspace-write' }),
@@ -295,11 +295,11 @@ test('an absent settings service leaves the catalog feature alive', () => {
 });
 
 test('state is scoped per profile', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'dsh-permission-auto-'));
+  const home = mkdtempSync(join(tmpdir(), 'dsh-experimental-auto-review-enhance-'));
   const web = makeContext({ home });
   apply(web.ctx);
   await web.settings.mutate('permission', [{ op: 'set', path: ['defaultPreset'], value: 'auto' }], 7);
-  assert.ok(existsSync(join(home, 'permission-auto', 'web.json')));
+  assert.ok(existsSync(join(home, 'experimental-auto-review-enhance', 'web.json')));
 
   const desktop = makeContext({ home });
   desktop.ctx.get = (key) => (key === 'settings' ? desktop.settings : key === 'profileContext' ? { home, name: 'desktop' } : undefined);
@@ -309,10 +309,10 @@ test('state is scoped per profile', async () => {
 });
 
 test('a choice saved under the pre-rename state directory is still honoured', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'dsh-permission-auto-'));
+  const home = mkdtempSync(join(tmpdir(), 'dsh-experimental-auto-review-enhance-'));
   const { mkdirSync } = await import('node:fs');
-  mkdirSync(join(home, 'permission-auto-default'), { recursive: true });
-  writeFileSync(join(home, 'permission-auto-default', 'web.json'), JSON.stringify({ defaultPreset: 'auto' }));
+  mkdirSync(join(home, 'permission-auto'), { recursive: true });
+  writeFileSync(join(home, 'permission-auto', 'web.json'), JSON.stringify({ defaultPreset: 'auto' }));
   const { ctx, presets, settings, state } = makeContext({ home });
   apply(ctx);
   assert.equal(presets.catalog().defaultPreset, 'auto');
@@ -324,12 +324,12 @@ test('a choice saved under the pre-rename state directory is still honoured', as
 });
 
 test('the current state directory wins over the legacy one', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'dsh-permission-auto-'));
+  const home = mkdtempSync(join(tmpdir(), 'dsh-experimental-auto-review-enhance-'));
   const { mkdirSync } = await import('node:fs');
-  mkdirSync(join(home, 'permission-auto-default'), { recursive: true });
   mkdirSync(join(home, 'permission-auto'), { recursive: true });
-  writeFileSync(join(home, 'permission-auto-default', 'web.json'), JSON.stringify({ defaultPreset: 'auto' }));
-  writeFileSync(join(home, 'permission-auto', 'web.json'), JSON.stringify({ defaultPreset: '' }));
+  mkdirSync(join(home, 'experimental-auto-review-enhance'), { recursive: true });
+  writeFileSync(join(home, 'permission-auto', 'web.json'), JSON.stringify({ defaultPreset: 'auto' }));
+  writeFileSync(join(home, 'experimental-auto-review-enhance', 'web.json'), JSON.stringify({ defaultPreset: '' }));
   const { ctx, presets } = makeContext({ home });
   apply(ctx);
   assert.equal(presets.catalog().defaultPreset, 'workspace-write');

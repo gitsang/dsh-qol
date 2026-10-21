@@ -1,4 +1,4 @@
-# dsh-permission-auto
+# dsh-experimental-auto-review-enhance
 
 Offer the experimental **Auto review** permission preset as a new-session
 default in **Settings → Permission**, without hard-wiring Auto review as the
@@ -46,7 +46,7 @@ plugin that adds it on the live Host.
 The Auto / not-Auto choice lives in a small per-profile JSON file:
 
 ```text
-$DSH_HOME/permission-auto/<profile>.json
+$DSH_HOME/experimental-auto-review-enhance/<profile>.json
 ```
 
 Nothing is written into the `permission` Config, so there is no second source
@@ -72,7 +72,7 @@ Enable `@gitsang/dsh-qol`, then switch this component on or off from its Plugins
 Switch this component off on the `@gitsang/dsh-qol` Plugins page. To remove the stored choice as well:
 
 ```bash
-rm -rf ~/.dsh/permission-auto
+rm -rf ~/.dsh/experimental-auto-review-enhance
 ```
 
 ## Scope and limits
@@ -97,17 +97,18 @@ rm -rf ~/.dsh/permission-auto
   `catalog` / `settings.describe` / `pinInitialPermission` would make it
   silently inert (it logs a warning) rather than break boot. If new sessions
   stop adopting Auto after a DSH upgrade, check the host log for
-  `permission-auto:` warnings first.
+  `experimental-auto-review-enhance:` warnings first.
 
 ## Troubleshooting
 
 - **Settings shows Auto review but new sessions still start on the old preset.**
   The Host loaded an older build of this plugin. Update and restart:
-  `cd ~/.dsh/profiles/web && pnpm update @gitsang/dsh-permission-auto`, then
+  `cd ~/.dsh/profiles/web && pnpm update @gitsang/dsh-experimental-auto-review-enhance`, then
   restart `dsh web`.
-- **State file location.** The choice is stored per profile; a renamed package
-  also renames its state directory, so re-select Auto review after upgrading
-  from a pre-rename build.
+- **State file location.** The choice is stored per profile under
+  `$DSH_HOME/experimental-auto-review-enhance/<profile>.json`. A choice saved
+  by the old `permission-auto` package is still read; the next write uses the
+  new directory.
 
 ## Verification
 

@@ -9,8 +9,8 @@
     - id: no-preview-notice
       name: '@gitsang/dsh-no-preview-notice'
 
-    - id: permission-auto
-      name: '@gitsang/dsh-permission-auto'
+    - id: experimental-auto-review-enhance
+      name: '@gitsang/dsh-experimental-auto-review-enhance'
 
     - id: reset-terminals
       name: '@gitsang/dsh-reset-terminals'
@@ -18,3 +18,6 @@
 
     - id: statusline
       name: '@gitsang/dsh-statusline'
+
+    - id: session-tree
+      name: '@gitsang/dsh-session-tree'
