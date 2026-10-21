@@ -13,8 +13,7 @@
     "src",
     "README.md",
     "README.zh.md",
-    "LICENSE",
-    "icon.svg"
+    "LICENSE"
   ],
   "keywords": [
     "dsh",
@@ -40,6 +39,5 @@
   },
   "publishConfig": {
     "access": "public"
-  },
-  "icon": "./icon.svg"
+  }
 }

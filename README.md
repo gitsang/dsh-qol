@@ -23,12 +23,11 @@ Every component row in **Plugins → @gitsang/dsh-qol** renders identically:
 - the title is the full package name (`@gitsang/dsh-statusline`, never a friendly alias);
 - the description is that package's own `package.json` description;
 - the row id (`statusline`) is shown as code;
-- the icon slot is intentionally blank — every package ships the same transparent
-  `icon.svg`, because DSH always reserves a 30px artwork slot and offers no
-  metadata switch to hide it.
+- the icon comes from DSH's default plugin artwork. No component package declares
+  an `icon`, so all five rows and the bundle card share the same two-tile fallback.
 
-Keep `icon.svg` in each package (and list it in `files`) if you add the package
-elsewhere; removing it makes DSH fall back to its default two-tile artwork.
+Adding a package-level `icon` (or a `meta.title` in `locale/*.json`) would make
+that one row look different again; leave both out to keep the list uniform.
 
 ## Install
 

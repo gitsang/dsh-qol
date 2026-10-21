@@ -15,8 +15,7 @@
     "cordis.patch.yml",
     "README.md",
     "README.zh.md",
-    "LICENSE",
-    "icon.svg"
+    "LICENSE"
   ],
   "repository": {
     "type": "git",
@@ -58,6 +57,5 @@
   },
   "publishConfig": {
     "access": "public"
-  },
-  "icon": "./icon.svg"
+  }
 }
