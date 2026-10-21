@@ -16,6 +16,19 @@
 
 只有 `@gitsang/dsh-qol` 是安装进 profile 的 bundle。五个组件包是它的依赖，并且**刻意不再声明自己的 `dsh.bundle`**。总 bundle 的 patch 为每个组件插入一条 Loader row，所以在 **插件 → @gitsang/dsh-qol → 包含的组件** 里可以看到五个独立开关。
 
+## 组件展示约定
+
+**插件 → @gitsang/dsh-qol** 里的每一行组件都使用同一套展示规则：
+
+- 标题是完整包名（`@gitsang/dsh-statusline`，不用「状态栏」这类别名）；
+- 描述来自该包自己的 `package.json` description；
+- row id（`statusline`）以代码样式显示；
+- 图标位刻意留空：每个包都带同一份透明 `icon.svg`，因为 DSH 总会预留 30px
+  图标位，且没有元数据开关可以隐藏它。
+
+如果要在别处复用这些包，请保留 `icon.svg` 并写进 `files`；删掉它 DSH 会回退到默认
+的双色方块图标。
+
 ## 安装
 
 ### 从本地 checkout 安装

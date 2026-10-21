@@ -16,6 +16,20 @@ A quality-of-life bundle for [DeepSeek Harness](https://github.com/deepseek-ai/d
 
 Only `@gitsang/dsh-qol` is installed as a bundle. The five component packages are dependencies; they deliberately do **not** declare their own `dsh.bundle`. The bundle patch inserts one Loader row per component, so **Plugins → @gitsang/dsh-qol → Components** lists five independent switches.
 
+## How components are presented
+
+Every component row in **Plugins → @gitsang/dsh-qol** renders identically:
+
+- the title is the full package name (`@gitsang/dsh-statusline`, never a friendly alias);
+- the description is that package's own `package.json` description;
+- the row id (`statusline`) is shown as code;
+- the icon slot is intentionally blank — every package ships the same transparent
+  `icon.svg`, because DSH always reserves a 30px artwork slot and offers no
+  metadata switch to hide it.
+
+Keep `icon.svg` in each package (and list it in `files`) if you add the package
+elsewhere; removing it makes DSH fall back to its default two-tile artwork.
+
 ## Install
 
 ### From a local checkout

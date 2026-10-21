@@ -13,7 +13,8 @@
   "files": [
     "src",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "icon.svg"
   ],
   "repository": {
     "type": "git",
@@ -41,5 +42,6 @@
   "homepage": "https://github.com/gitsang/dsh-qol/tree/main/packages/dsh-no-preview-notice#readme",
   "bugs": {
     "url": "https://github.com/gitsang/dsh-qol/issues"
-  }
+  },
+  "icon": "./icon.svg"
 }

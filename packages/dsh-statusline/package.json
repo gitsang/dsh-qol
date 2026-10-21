@@ -9,12 +9,10 @@
   "exports": {
     ".": "./src/index.js",
     "./client": "./src/client.js",
-    "./package.json": "./package.json",
-    "./locale/*.json": "./locale/*.json"
+    "./package.json": "./package.json"
   },
   "files": [
     "src",
-    "locale",
     "icon.svg",
     "README.md",
     "README.zh.md",

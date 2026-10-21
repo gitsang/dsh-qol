@@ -1,6 +1,0 @@
-{
-  "meta": {
-    "title": "Statusline",
-    "description": "Splits model time into first-token wait and decode, with throughput, token usage, cache hit, and context pressure."
-  }
-}

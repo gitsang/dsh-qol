@@ -14,7 +14,8 @@
   "files": [
     "src",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "icon.svg"
   ],
   "license": "MIT",
   "keywords": [
@@ -48,5 +49,6 @@
   "homepage": "https://github.com/gitsang/dsh-qol/tree/main/packages/dsh-reset-terminals#readme",
   "bugs": {
     "url": "https://github.com/gitsang/dsh-qol/issues"
-  }
+  },
+  "icon": "./icon.svg"
 }
