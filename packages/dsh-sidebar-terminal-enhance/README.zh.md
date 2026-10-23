@@ -93,7 +93,9 @@ dsh plugin --profile web add @gitsang/dsh-qol
    `JetBrainsMono Nerd Font Mono, Sarasa Term SC Nerd Font, monospace`。
    字体族名不等于文件名；Linux 上用 `fc-list : family | grep -i nerd` 确认，
    macOS 上用「字体册」查看。
-4. 选择主体色，用预览确认图标字形正常，然后点 **保存**。
+4. 预览会显示 `0-9a-zA-Z` 以及 Nerd Font 字形
+   `U+E627 U+E73C U+F323 U+E620 U+E738 U+ED0D`；确认字形正常后选择主体色，
+   再点 **保存**。
 
 ## 范围与行为
 

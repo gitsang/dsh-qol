@@ -58,7 +58,14 @@ window.__ModuleLoader__.load({
     const SIZE_MAX = 32
     const LINE_HEIGHT_MIN = 0.9
     const LINE_HEIGHT_MAX = 2
-    const PREVIEW_GLYPHS = '\ue0b0 \uf17c \uf015 \u276f \u2500\u2500'
+    /** Preview line one: digits and lowercase ASCII. */
+    const PREVIEW_LOWERCASE = '0123456789 abcdefghijklmnopqrstuvwxyz'
+    /** Preview line two: uppercase ASCII. */
+    const PREVIEW_UPPERCASE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    /** Preview line three: Nerd Font private-use code points, one per glyph. */
+    const PREVIEW_ICONS = Object.freeze(['\ue627', '\ue73c', '\uf323', '\ue620', '\ue738', '\ued0d'])
+    /** Every preview line, newline-separated because the preview is `white-space: pre`. */
+    const PREVIEW_GLYPHS = `${PREVIEW_LOWERCASE}\n${PREVIEW_UPPERCASE}\n${PREVIEW_ICONS.join('  ')}`
 
     const zh = {
       fontSection: '字体',
@@ -1372,6 +1379,9 @@ window.__ModuleLoader__.load({
       CSS,
       COLOR_STORAGE_KEY,
       PREVIEW_GLYPHS,
+      PREVIEW_ICONS,
+      PREVIEW_LOWERCASE,
+      PREVIEW_UPPERCASE,
       ROW_KEY,
       STORAGE_KEY,
       THEME_SOURCE,

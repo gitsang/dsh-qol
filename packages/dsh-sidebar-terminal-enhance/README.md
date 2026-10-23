@@ -103,7 +103,9 @@ Then:
    `JetBrainsMono Nerd Font Mono, Sarasa Term SC Nerd Font, monospace`.
    The family name is not the file name; check it with
    `fc-list : family | grep -i nerd` on Linux or Font Book on macOS.
-4. Choose a palette, use the preview line to confirm the icon glyphs render,
+4. The preview shows `0-9a-zA-Z` plus the Nerd Font glyphs
+   `U+E627 U+E73C U+F323 U+E620 U+E738 U+ED0D`; confirm they render before
+   choosing a palette,
    then select **Save**.
 
 ## Scope and behaviour

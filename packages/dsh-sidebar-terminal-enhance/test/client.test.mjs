@@ -85,6 +85,9 @@ const {
   CSS,
   COLOR_STORAGE_KEY,
   PREVIEW_GLYPHS,
+  PREVIEW_ICONS,
+  PREVIEW_LOWERCASE,
+  PREVIEW_UPPERCASE,
   ROW_KEY,
   STORAGE_KEY,
   THEME_SOURCE,
@@ -381,7 +384,14 @@ test('CSS is scoped to the terminal surface and configuration page', () => {
   assert.match(CSS, /dshTerminalFont_preview/)
   assert.match(CSS, /\[data-sidebar-terminal\]/)
   assert.doesNotMatch(CSS, /^body\{/)
-  assert.match(PREVIEW_GLYPHS, /\ue0b0/u)
+  assert.equal(PREVIEW_LOWERCASE, '0123456789 abcdefghijklmnopqrstuvwxyz')
+  assert.equal(PREVIEW_UPPERCASE, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ')
+  assert.deepEqual(PREVIEW_ICONS, ['\ue627', '\ue73c', '\uf323', '\ue620', '\ue738', '\ued0d'])
+  assert.equal(PREVIEW_GLYPHS, `${PREVIEW_LOWERCASE}\n${PREVIEW_UPPERCASE}\n${PREVIEW_ICONS.join('  ')}`)
+  // Every preview line must stay inside the printable ASCII range, and the
+  // icon line must be exactly the six requested private-use code points.
+  assert.match(PREVIEW_LOWERCASE + PREVIEW_UPPERCASE, /^[0-9a-zA-Z ]+$/u)
+  assert.equal(PREVIEW_ICONS.join(''), '\ue627\ue73c\uf323\ue620\ue738\ued0d')
 })
 
 
