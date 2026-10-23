@@ -38,6 +38,8 @@ window.__ModuleLoader__.load({
   id: '@gitsang/dsh-enter-swap',
   factory: (require) => {
     const React = require('react')
+    const primitives = require('@deepseek-ai/dsh-client-ui-primitives')
+    const { SegmentedControl, SettingsForm } = primitives
     const module = { exports: {} }
     const exports = module.exports
 
@@ -56,6 +58,10 @@ window.__ModuleLoader__.load({
       swap: 'Enter 换行 / Ctrl+Enter 发送',
       default: 'dsh 默认：Enter 发送',
       save: '保存',
+      saving: '保存中…',
+      saveFailed: '保存失败，请重试。',
+      readOnly: '当前部署的设置为只读。',
+      unavailable: '该组件当前不可配置。',
     }
     const en = {
       title: 'Enter key behavior',
@@ -65,6 +71,10 @@ window.__ModuleLoader__.load({
       swap: 'Enter newline / Ctrl+Enter sends',
       default: 'dsh default: Enter sends',
       save: 'Save',
+      saving: 'Saving…',
+      saveFailed: 'Could not save. Try again.',
+      readOnly: 'This deployment stores settings read-only.',
+      unavailable: 'This component cannot be configured right now.',
     }
 
     /** The composer's contenteditable root; Lexical binds `keydown` here. */
@@ -76,16 +86,9 @@ window.__ModuleLoader__.load({
 
     const CSS_ID = '@gitsang/dsh-enter-swap/EnterSwapConfig.css'
     const CSS = [
-      '.dshEnterSwapPage{display:grid;gap:10px;max-width:520px}',
-      '.dshEnterSwapField{display:grid;gap:4px}',
-      '.dshEnterSwapTitle{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:500;line-height:22px}',
-      '.dshEnterSwapDesc{color:var(--dsw-alias-label-tertiary);font-size:12px;font-weight:400;line-height:18px;margin:0}',
-      '.dshEnterSwapSelect{box-sizing:border-box;border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-module-platform);height:36px;font:inherit;color:var(--dsw-alias-label-primary);cursor:pointer;border:.5px solid var(--dsw-alias-border-l3);padding:0 10px;font-size:14px;line-height:22px;width:100%;max-width:320px}',
-      '.dshEnterSwapSelect:hover{background:var(--dsw-alias-interactive-bg-hover)}',
-      '.dshEnterSwapSelect:focus-visible{outline:1px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:2px}',
-      '.dshEnterSwapActions{display:flex;justify-content:flex-end}',
-      '.dshEnterSwapSave{min-height:32px;padding:0 14px;border:none;border-radius:var(--dsw-radius-md);background:var(--dsw-alias-button-primary-fill);color:var(--dsw-alias-label-primary-foreground);font:inherit;cursor:pointer}',
-      '.dshEnterSwapSave:disabled{background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-tertiary);cursor:default}',
+      '.dshEnterSwapField{display:flex;flex-direction:column;gap:6px;padding:12px 0}',
+      '.dshEnterSwapLabel{font-size:13px;font-weight:500;line-height:1.5;color:var(--dsw-alias-label-primary)}',
+      '.dshEnterSwapHint{margin:0;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary)}',
     ].join('')
     if (
       typeof document !== 'undefined' &&
@@ -232,40 +235,44 @@ window.__ModuleLoader__.load({
         setCurrent(mode)
         setDraft(mode)
       }
+      const shell = {
+        available: true,
+        writable: true,
+        dirty,
+        invalid: false,
+        saving: false,
+        failed: false,
+      }
 
       return React.createElement(
-        'div',
-        { className: 'dshEnterSwapPage', 'data-enter-swap-config': '' },
-        React.createElement(
-          'label',
-          { className: 'dshEnterSwapField' },
-          React.createElement('span', { className: 'dshEnterSwapTitle' }, t('title')),
-          React.createElement(
-            'select',
-            {
-              className: 'dshEnterSwapSelect',
-              value: draft,
-              'aria-label': t('title'),
-              onChange: (event) => setDraft(event.currentTarget.value),
-            },
-            React.createElement('option', { value: SWAP }, t('swap')),
-            React.createElement('option', { value: UPSTREAM }, t('default')),
-          ),
-        ),
-        React.createElement('p', { className: 'dshEnterSwapDesc' }, t('description')),
+        SettingsForm,
+        {
+          labels: {
+            unavailable: t('unavailable'),
+            readOnly: t('readOnly'),
+            saveFailed: t('saveFailed'),
+            save: t('save'),
+            saving: t('saving'),
+          },
+          state: shell,
+          onSave: save,
+          onDiscard: () => setDraft(mode),
+        },
         React.createElement(
           'div',
-          { className: 'dshEnterSwapActions' },
-          React.createElement(
-            'button',
-            {
-              type: 'button',
-              className: 'dshEnterSwapSave',
-              disabled: !dirty,
-              onClick: save,
-            },
-            t('save'),
-          ),
+          { className: 'dshEnterSwapField', 'data-enter-swap-config': '' },
+          React.createElement('span', { className: 'dshEnterSwapLabel' }, t('title')),
+          React.createElement(SegmentedControl, {
+            id: 'enter-swap-mode',
+            value: draft,
+            options: [
+              { value: SWAP, label: t('swap') },
+              { value: UPSTREAM, label: t('default') },
+            ],
+            onChange: setDraft,
+            label: t('title'),
+          }),
+          React.createElement('p', { className: 'dshEnterSwapHint' }, t('description')),
         ),
       )
     }

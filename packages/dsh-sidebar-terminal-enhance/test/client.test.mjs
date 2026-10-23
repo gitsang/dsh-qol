@@ -32,26 +32,42 @@ async function loadClient() {
   assert.equal(typeof factory, 'function')
   return factory((specifier) => {
     if (specifier === 'react') return {}
+    if (specifier === '@deepseek-ai/dsh-client-ui-primitives') return primitives
     throw new Error(`unexpected require ${specifier}`)
   })
+}
+
+/** Browser primitives used by the client half, stubbed for pure unit tests. */
+const primitives = {
+  SegmentedControl: () => null,
+  SettingsForm: ({ children }) => children,
+  SettingsValueField: () => null,
 }
 
 const client = await loadClient()
 const {
   applyFont,
+  buildThemeTokens,
+  commitPreference,
   commitSettings,
   findTerminal,
+  getPreference,
   getSettings,
   inspectFiberLane,
   isFitLike,
   isTerminalLike,
   normalizeFamily,
   normalizeLineHeight,
+  normalizePreference,
   normalizeSettings,
   normalizeSize,
   originalOptions,
+  parseStoredPreference,
   parseStoredSettings,
+  PALETTES,
+  PREFERENCES,
   readRawSettings,
+  refreshPreferenceFromStorage,
   refreshFromStorage,
   refit,
   resetSettings,
@@ -59,9 +75,11 @@ const {
   setLineHeight,
   setSize,
   CSS,
+  COLOR_STORAGE_KEY,
   PREVIEW_GLYPHS,
   ROW_KEY,
   STORAGE_KEY,
+  THEME_SOURCE,
 } = client.__test
 
 /** Minimal stand-in for an xterm Terminal with public option setters. */
@@ -147,6 +165,53 @@ test('stored settings are validated and never throw on bad JSON', () => {
   assert.deepEqual(parseStoredSettings('broken'), {})
   assert.deepEqual(parseStoredSettings(''), {})
   assert.deepEqual(parseStoredSettings(null), {})
+})
+
+test('palette preferences accept only light, dark, and follow-appearance', () => {
+  assert.equal(normalizePreference('light'), 'light')
+  assert.equal(normalizePreference('dark'), 'dark')
+  assert.equal(normalizePreference('system'), 'system')
+  assert.equal(normalizePreference('blue'), 'system')
+  assert.equal(normalizePreference(null), 'system')
+  assert.equal(parseStoredPreference(null), 'system')
+  assert.equal(parseStoredPreference('dark'), 'dark')
+  assert.deepEqual(PREFERENCES, ['light', 'dark', 'system'])
+})
+
+test('fixed palettes publish matching terminal theme tokens for both modes', () => {
+  assert.equal(buildThemeTokens('system', 1), undefined)
+  assert.deepEqual(buildThemeTokens('light', 2), {
+    '--dsh-terminal-color-background': { light: PALETTES.light.background, dark: PALETTES.light.background },
+    '--dsh-terminal-color-foreground': { light: PALETTES.light.foreground, dark: PALETTES.light.foreground },
+    '--dsh-terminal-color-revision': { light: '2', dark: '2' },
+  })
+  assert.deepEqual(buildThemeTokens('dark', 3), {
+    '--dsh-terminal-color-background': { light: PALETTES.dark.background, dark: PALETTES.dark.background },
+    '--dsh-terminal-color-foreground': { light: PALETTES.dark.foreground, dark: PALETTES.dark.foreground },
+    '--dsh-terminal-color-revision': { light: '3', dark: '3' },
+  })
+})
+
+test('palette commits persist and reuse the previous storage key', () => {
+  globalThis.localStorage.removeItem(COLOR_STORAGE_KEY)
+  globalThis.localStorage.setItem('@gitsang/dsh-terminal-color/palette', 'old')
+  commitPreference('dark')
+  assert.equal(getPreference(), 'dark')
+  assert.equal(globalThis.localStorage.getItem(COLOR_STORAGE_KEY), 'dark')
+  assert.equal(globalThis.localStorage.getItem('@gitsang/dsh-terminal-color/palette'), null)
+  commitPreference('system')
+  assert.equal(getPreference(), 'system')
+  assert.equal(globalThis.localStorage.getItem(COLOR_STORAGE_KEY), null)
+})
+
+test('an external palette write is adopted on the next scan', () => {
+  globalThis.localStorage.setItem(COLOR_STORAGE_KEY, 'light')
+  assert.equal(refreshPreferenceFromStorage(), true)
+  assert.equal(getPreference(), 'light')
+  assert.equal(refreshPreferenceFromStorage(), false)
+  globalThis.localStorage.removeItem(COLOR_STORAGE_KEY)
+  assert.equal(refreshPreferenceFromStorage(), true)
+  assert.equal(getPreference(), 'system')
 })
 
 test('terminal shape checks reject look-alikes', () => {
@@ -303,9 +368,10 @@ test('an external storage write is adopted on the next scan', () => {
   delete globalThis.document
 })
 
-test('CSS is scoped to the configuration page and keeps the preview monospaced', () => {
-  assert.match(CSS, /dshTerminalFont_page/)
+test('CSS is scoped to the terminal surface and configuration page', () => {
+  assert.match(CSS, /dshTerminalFont_section/)
   assert.match(CSS, /dshTerminalFont_preview/)
+  assert.match(CSS, /\[data-sidebar-terminal\]/)
   assert.doesNotMatch(CSS, /^body\{/)
   assert.match(PREVIEW_GLYPHS, /\ue0b0/u)
 })
@@ -332,6 +398,12 @@ test('registers the component configuration page on the Plugins row', () => {
       },
       register(options) {
         events.push(['register', options])
+        return () => {}
+      },
+    },
+    theme: {
+      overrideTokens(source, tokens) {
+        events.push(['theme', source, tokens])
         return () => {}
       },
     },

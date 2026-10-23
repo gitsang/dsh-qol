@@ -15,6 +15,8 @@ window.__ModuleLoader__.load({
   id: '@gitsang/dsh-experimental-auto-review-enhance',
   factory: (require) => {
     const React = require('react')
+    const primitives = require('@deepseek-ai/dsh-client-ui-primitives')
+    const { SegmentedControl, SettingsForm, Switch } = primitives
     const module = { exports: {} }
     const exports = module.exports
 
@@ -44,6 +46,8 @@ window.__ModuleLoader__.load({
       save: '保存',
       saving: '正在保存…',
       saveFailed: '保存失败，请重试。',
+      readOnly: '当前部署的设置为只读。',
+      unavailable: '该组件当前不可配置。',
       loadFailed: '读取设置失败。',
       retry: '重试',
       loading: '加载中…',
@@ -62,6 +66,8 @@ window.__ModuleLoader__.load({
       save: 'Save',
       saving: 'Saving…',
       saveFailed: 'Could not save. Try again.',
+      readOnly: 'This deployment stores settings read-only.',
+      unavailable: 'This component cannot be configured right now.',
       loadFailed: 'Could not read the settings.',
       retry: 'Retry',
       loading: 'Loading…',
@@ -109,36 +115,14 @@ window.__ModuleLoader__.load({
       return normalizeConfig(await response.json())
     }
 
-    /** The shared styles for the row page. */
+    /** The shared styles for the page's custom field wrappers. */
     const styles = {
-      root: { display: 'grid', gap: '12px', maxWidth: '520px' },
-      section: { display: 'grid', gap: '4px' },
-      label: { display: 'grid', gap: '4px' },
-      labelText: { fontWeight: 500 },
-      checkboxLabel: { display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500 },
-      select: {
-        boxSizing: 'border-box',
-        width: '100%',
-        minHeight: '36px',
-        padding: '0 10px',
-        border: '0.5px solid var(--dsw-alias-border-l3)',
-        borderRadius: 'var(--dsw-radius-md)',
-        background: 'var(--dsw-alias-bg-module-platform)',
-        color: 'var(--dsw-alias-label-primary)',
-        font: 'inherit',
-      },
-      hint: {
-        margin: 0,
-        color: 'var(--dsw-alias-label-tertiary)',
-        fontSize: '12px',
-        lineHeight: '18px',
-      },
-      warning: {
-        margin: 0,
-        color: 'var(--dsw-alias-label-warning, var(--dsw-alias-label-secondary))',
-        fontSize: '12px',
-        lineHeight: '18px',
-      },
+      field: { display: 'flex', flexDirection: 'column', gap: '6px', padding: '12px 0' },
+      fieldDivider: { display: 'flex', flexDirection: 'column', gap: '6px', padding: '12px 0', borderTop: '0.5px solid var(--dsw-alias-border-l2)' },
+      label: { fontSize: '13px', fontWeight: 500, lineHeight: '1.5', color: 'var(--dsw-alias-label-primary)' },
+      toggleRow: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px' },
+      hint: { margin: 0, fontSize: '12px', lineHeight: '1.5', color: 'var(--dsw-alias-label-tertiary)' },
+      warning: { margin: 0, fontSize: '12px', lineHeight: '1.5', color: 'var(--dsw-alias-state-error-primary)' },
       error: { margin: 0, color: 'var(--dsw-alias-label-error)' },
       footer: { display: 'flex', justifyContent: 'flex-end' },
       save: (active) => ({
@@ -185,10 +169,17 @@ window.__ModuleLoader__.load({
 
       if (view === 'summary') return t('summary')
 
-      const disableControls = status === 'loading' || status === 'saving'
-      const dirty = draft.defaultPreset !== current.defaultPreset || draft.reviewLanguage !== current.reviewLanguage
       const saving = status === 'saving'
+      const dirty = draft.defaultPreset !== current.defaultPreset || draft.reviewLanguage !== current.reviewLanguage
       const autoBlocked = !current.autoAvailable
+      const shell = {
+        available: status !== 'error',
+        writable: true,
+        dirty,
+        invalid: false,
+        saving,
+        failed,
+      }
       const save = async () => {
         if (!dirty || saving) return
         setStatus('saving')
@@ -200,107 +191,78 @@ window.__ModuleLoader__.load({
           setStatus('ready')
         } catch {
           setFailed(true)
-          setStatus('error')
+          setStatus('ready')
         }
       }
 
-      const form = React.createElement(
-        React.Fragment,
-        null,
-        React.createElement(
-          'div',
-          { style: styles.section },
-          React.createElement(
-            'label',
-            { style: styles.checkboxLabel },
-            React.createElement('input', {
-              type: 'checkbox',
-              checked: draft.defaultPreset === 'auto',
-              disabled: disableControls || autoBlocked,
-              onChange: (event) => {
-                const checked = event.currentTarget.checked
-                setDraft((previous) => ({
-                  ...previous,
-                  defaultPreset: checked ? 'auto' : '',
-                }))
-              },
-            }),
-            t('autoTitle'),
-          ),
-          React.createElement('p', { style: styles.hint }, t('autoHint')),
-          autoBlocked ? React.createElement('p', { style: styles.warning }, t('autoUnavailable')) : null,
-        ),
-        React.createElement(
-          'label',
-          { htmlFor: 'auto-review-enhance-language', style: styles.label },
-          React.createElement('span', { style: styles.labelText }, t('language')),
-          React.createElement(
-            'select',
-            {
-              id: 'auto-review-enhance-language',
-              value: draft.reviewLanguage,
-              disabled: disableControls,
-              onChange: (event) => {
-                const reviewLanguage = normalizeLanguage(event.currentTarget.value)
-                setDraft((previous) => ({ ...previous, reviewLanguage }))
-              },
-              style: styles.select,
-            },
-            React.createElement('option', { value: 'en' }, t('english')),
-            React.createElement('option', { value: 'zh' }, t('chinese')),
-          ),
-        ),
-        React.createElement('p', { style: styles.hint }, t('languageHint')),
-      )
-
       if (status === 'loading') {
-        return React.createElement(
-          'div',
-          { style: styles.root },
-          React.createElement('div', { style: styles.labelText }, t('title')),
-          form,
-          React.createElement('p', { role: 'status', style: styles.hint }, t('loading')),
-        )
+        return React.createElement('p', { role: 'status', style: styles.hint }, t('loading'))
       }
 
       if (status === 'error') {
         return React.createElement(
           'div',
-          { style: styles.root },
-          React.createElement('div', { style: styles.labelText }, t('title')),
-          form,
-          React.createElement('p', { role: 'alert', style: styles.error }, failed ? t('saveFailed') : t('loadFailed')),
+          { style: styles.field },
+          React.createElement('p', { role: 'alert', style: styles.error }, t('loadFailed')),
           React.createElement(
-            'div',
-            { style: styles.footer },
-            React.createElement(
-              'button',
-              { type: 'button', onClick: () => { void load() }, style: styles.save(true) },
-              t('retry'),
-            ),
+            'button',
+            { type: 'button', onClick: () => { void load() }, style: styles.save(true) },
+            t('retry'),
           ),
         )
       }
 
       return React.createElement(
-        'div',
-        { style: styles.root },
-        React.createElement('div', { style: styles.labelText }, t('title')),
-        form,
-        failed ? React.createElement('p', { role: 'alert', style: styles.error }, t('saveFailed')) : null,
+        SettingsForm,
+        {
+          labels: {
+            unavailable: t('unavailable'),
+            readOnly: t('readOnly'),
+            saveFailed: t('saveFailed'),
+            save: t('save'),
+            saving: t('saving'),
+          },
+          state: shell,
+          onSave: () => { void save() },
+          onDiscard: () => { setDraft(current); setFailed(false) },
+        },
         React.createElement(
           'div',
-          { style: styles.footer },
+          { style: styles.field },
           React.createElement(
-            'button',
-            {
-              type: 'button',
-              disabled: !dirty || saving,
-              onClick: () => { void save() },
-              style: styles.save(dirty && !saving),
-            },
-            t(saving ? 'saving' : 'save'),
+            'div',
+            { style: styles.toggleRow },
+            React.createElement('span', { style: styles.label }, t('autoTitle')),
+            React.createElement(Switch, {
+              checked: draft.defaultPreset === 'auto',
+              disabled: saving || autoBlocked,
+              label: t('autoTitle'),
+              onChange: (checked) => {
+                setDraft((previous) => ({ ...previous, defaultPreset: checked ? 'auto' : '' }))
+              },
+            }),
           ),
+          React.createElement('p', { style: styles.hint }, t('autoHint')),
+          autoBlocked ? React.createElement('p', { style: styles.warning }, t('autoUnavailable')) : null,
+        ),
+        React.createElement(
+          'div',
+          { style: styles.fieldDivider },
+          React.createElement('span', { style: styles.label }, t('language')),
+          React.createElement(SegmentedControl, {
+            id: 'auto-review-enhance-language',
+            value: draft.reviewLanguage,
+            options: [
+              { value: 'en', label: t('english') },
+              { value: 'zh', label: t('chinese') },
+            ],
+            onChange: (reviewLanguage) => {
+              setDraft((previous) => ({ ...previous, reviewLanguage: normalizeLanguage(reviewLanguage) }))
+            },
+            label: t('language'),
+            disabled: saving,
+          }),
+          React.createElement('p', { style: styles.hint }, t('languageHint')),
         ),
       )
     }

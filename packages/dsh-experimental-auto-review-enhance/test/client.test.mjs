@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+const primitives = {
+  SegmentedControl: () => null,
+  SettingsForm: ({ children }) => children,
+  Switch: () => null,
+}
+
 /** Load the browser half through a fake module-loader registration. */
 async function loadClient() {
   const factories = new Map()
@@ -16,6 +22,7 @@ async function loadClient() {
   assert.equal(typeof factory, 'function')
   return factory((specifier) => {
     if (specifier === 'react') return {}
+    if (specifier === '@deepseek-ai/dsh-client-ui-primitives') return primitives
     throw new Error(`unexpected require ${specifier}`)
   })
 }

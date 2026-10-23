@@ -1,6 +1,11 @@
 /**
  * Browser half of dsh-sidebar-terminal-enhance.
  *
+ * One component owns the sidebar terminal's presentation: its xterm font
+ * options, its light/dark/follow-appearance palette, and the configuration
+ * page that edits both. The font half and the color half used to be separate
+ * plugins; they share the terminal surface and now share one lifecycle.
+ *
  * The shipped sidebar terminal builds its xterm emulator with a hard-coded
  * font stack and no configuration surface:
  *
@@ -23,16 +28,28 @@
  * inside the shipped component. Every step is shape-checked and wrapped in
  * try/catch, so a future React/xterm change degrades to "no font override"
  * instead of breaking the terminal.
+ *
+ * The palette half layers two scoped CSS variables over the terminal screen
+ * through the public theme override service. Nothing outside
+ * `[data-sidebar-terminal]` reads them.
  */
 window.__ModuleLoader__.load({
   id: '@gitsang/dsh-sidebar-terminal-enhance',
   factory: (require) => {
     const React = require('react')
+    const primitives = require('@deepseek-ai/dsh-client-ui-primitives')
+    const { SegmentedControl, SettingsForm, SettingsValueField } = primitives
     const module = { exports: {} }
     const exports = module.exports
 
     const NS = 'sidebarTerminalEnhance'
     const STORAGE_KEY = '@gitsang/dsh-sidebar-terminal-enhance/font'
+    const COLOR_STORAGE_KEY = '@gitsang/dsh-terminal-color/preference'
+    const LEGACY_COLOR_STORAGE_KEY = '@gitsang/dsh-terminal-color/palette'
+    const THEME_SOURCE = '@gitsang/dsh-terminal-color'
+    const BACKGROUND_VAR = '--dsh-terminal-color-background'
+    const FOREGROUND_VAR = '--dsh-terminal-color-foreground'
+    const REVISION_VAR = '--dsh-terminal-color-revision'
     const PLUGIN_ID = '@gitsang/dsh-sidebar-terminal-enhance'
     const CSS_ID = `${PLUGIN_ID}/SidebarTerminalEnhance.css`
 
@@ -43,69 +60,83 @@ window.__ModuleLoader__.load({
     const PREVIEW_GLYPHS = '\ue0b0 \uf17c \uf015 \u276f \u2500\u2500'
 
     const zh = {
-      title: '终端字体',
-      description: '设置右侧栏终端使用的字体族、字号与行高；图标缺失时填 Nerd Font 的族名。',
+      fontSection: '字体',
       family: '字体族',
       familyPlaceholder: '例如 JetBrainsMono Nerd Font Mono',
-      familyAria: '终端字体族',
+      familyHint: '字体必须安装在浏览器所在的电脑上；族名不等于文件名。留空表示沿用 DSH 默认值。',
       size: '字号',
-      sizeAria: '终端字号',
+      sizeHint: '8–32 px 之间的整数。留空表示沿用 DSH 默认值。',
       lineHeight: '行高',
-      lineHeightAria: '终端行高',
-      reset: '恢复默认',
+      lineHeightHint: '0.9–2 之间的倍数。留空表示沿用 DSH 默认值。',
       preview: '预览',
       previewAria: '字体预览',
-      hint: '字体必须安装在浏览器所在的电脑上；族名不等于文件名。留空表示沿用 DSH 默认值。',
-      summary: '设置右侧栏终端的字体族、字号与行高',
+      colorSection: '主体色',
+      colorHint: '仅影响右侧栏终端；选择“跟随外观”时继续使用 DSH 当前的浅色或深色主题。',
+      'choice.light': '浅色',
+      'choice.dark': '深色',
+      'choice.system': '跟随外观',
+      summary: '设置右侧栏终端的字体与主体色',
       save: '保存',
+      saving: '保存中…',
+      saveFailed: '保存失败，请重试。',
+      readOnly: '当前部署的设置为只读。',
+      unavailable: '该组件当前不可配置。',
+      overridden: '已覆盖',
+      reset: '恢复默认',
       invalidSize: '字号应为 8–32 之间的整数。',
       invalidLineHeight: '行高应为 0.9–2 之间的数字。',
     }
 
     const en = {
-      title: 'Terminal font',
-      description: 'Set the right Sidebar terminal’s font family, size and line height. Use the Nerd Font family name when glyphs are missing.',
+      fontSection: 'Font',
       family: 'Font family',
       familyPlaceholder: 'e.g. JetBrainsMono Nerd Font Mono',
-      familyAria: 'Terminal font family',
+      familyHint: 'The font must be installed on the machine running the browser; the family name is not the file name. Leave empty to keep the DSH default.',
       size: 'Size',
-      sizeAria: 'Terminal font size',
+      sizeHint: 'A whole number between 8 and 32 px. Leave empty to keep the DSH default.',
       lineHeight: 'Line height',
-      lineHeightAria: 'Terminal line height',
-      reset: 'Reset to defaults',
+      lineHeightHint: 'A multiplier between 0.9 and 2. Leave empty to keep the DSH default.',
       preview: 'Preview',
       previewAria: 'Font preview',
-      hint: 'The font must be installed on the machine running the browser; the family name is not the file name. Leave a field empty to keep the DSH default.',
-      summary: 'Set the sidebar terminal’s font family, size and line height',
+      colorSection: 'Palette',
+      colorHint: 'Only affects the right Sidebar terminal. Follow appearance keeps using the current DSH light or dark theme.',
+      'choice.light': 'Light',
+      'choice.dark': 'Dark',
+      'choice.system': 'Follow appearance',
+      summary: 'Set the sidebar terminal’s font and palette',
       save: 'Save',
+      saving: 'Saving…',
+      saveFailed: 'Could not save. Try again.',
+      readOnly: 'This deployment stores settings read-only.',
+      unavailable: 'This component cannot be configured right now.',
+      overridden: 'Overridden',
+      reset: 'Reset to default',
       invalidSize: 'Font size must be a whole number between 8 and 32.',
       invalidLineHeight: 'Line height must be a number between 0.9 and 2.',
     }
 
     const CSS = [
-      '.dshTerminalFont_page{box-sizing:border-box;display:flex;flex-direction:column;gap:12px;max-width:520px}',
-      '.dshTerminalFont_row{box-sizing:border-box;display:flex;flex-direction:column;gap:12px}',
-      '.dshTerminalFont_header{display:flex;justify-content:space-between;align-items:flex-start;gap:24px}',
-      '.dshTerminalFont_copy{min-width:0}',
-      '.dshTerminalFont_title{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:500;line-height:20px}',
-      '.dshTerminalFont_description{color:var(--dsw-alias-label-secondary);margin-top:4px;font-size:12px;line-height:18px}',
-      '.dshTerminalFont_controls{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px}',
-      '.dshTerminalFont_field{display:inline-flex;flex-direction:column;gap:4px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}',
-      '.dshTerminalFont_fieldWide{flex:1 1 240px;min-width:180px}',
-      '.dshTerminalFont_input{box-sizing:border-box;height:28px;border:.5px solid var(--dsw-alias-border-l3);border-radius:6px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-family:inherit;font-size:12px;line-height:18px;padding:0 10px;width:100%}',
-      '.dshTerminalFont_input::placeholder{color:var(--dsw-alias-label-secondary)}',
-      '.dshTerminalFont_input:focus-visible{outline:2px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:2px}',
-      '.dshTerminalFont_number{width:76px;text-align:right}',
-      '.dshTerminalFont_reset{box-sizing:border-box;height:28px;border:.5px solid var(--dsw-alias-border-l3);border-radius:6px;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-1);cursor:pointer;padding:0 10px;font-family:inherit;font-size:12px;line-height:18px}',
-      '.dshTerminalFont_reset:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
-      '.dshTerminalFont_reset:disabled{opacity:.5;cursor:default}',
-      '.dshTerminalFont_reset:focus-visible{outline:2px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:2px}',
-      '.dshTerminalFont_preview{box-sizing:border-box;border:.5px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-markdown-code-block,var(--dsw-alias-bg-layer-1));color:var(--dsw-alias-label-primary);overflow:auto;white-space:pre;padding:8px 10px;font-size:13px;line-height:1.5}',
-      '.dshTerminalFont_hint{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}',
-      '.dshTerminalFont_error{margin:0;color:var(--dsw-alias-label-error);font-size:12px;line-height:18px}',
-      '.dshTerminalFont_actions{display:flex;justify-content:flex-end;gap:8px}',
-      '.dshTerminalFont_save{box-sizing:border-box;min-height:32px;border:none;border-radius:var(--dsw-radius-md);background:var(--dsw-alias-button-primary-fill);color:var(--dsw-alias-label-primary-foreground);cursor:pointer;padding:0 14px;font:inherit}',
-      '.dshTerminalFont_save:disabled{background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-tertiary);cursor:default}',
+      // Scope the palette overrides to the sidebar terminal. The fallbacks keep
+      // the shipped theme behavior for "Follow appearance" and before first paint.
+      '[data-sidebar-terminal]>div:has(>.xterm){background-color:var(--dsh-terminal-color-background,var(--dsw-alias-bg-base))!important;color:var(--dsh-terminal-color-foreground,var(--dsw-alias-label-primary))!important}',
+      '[data-sidebar-terminal] .xterm,[data-sidebar-terminal] .xterm-viewport,[data-sidebar-terminal] .xterm-scrollable-element{background-color:var(--dsh-terminal-color-background,var(--dsw-alias-bg-base))!important}',
+      '[data-sidebar-terminal] .xterm-rows{color:var(--dsh-terminal-color-foreground,var(--dsw-alias-label-primary))!important}',
+      '[data-sidebar-terminal] .xterm .xterm-rows .xterm-cursor.xterm-cursor-block:not(.xterm-cursor-blink){background-color:var(--terminal-cursor,var(--dsh-terminal-color-foreground))!important;color:var(--terminal-cursor-accent,var(--dsh-terminal-color-background))!important}',
+      '[data-sidebar-terminal] .xterm .xterm-rows .xterm-cursor.xterm-cursor-block.xterm-cursor-blink{background-color:var(--terminal-cursor,var(--dsh-terminal-color-foreground))!important;color:var(--terminal-cursor-accent,var(--dsh-terminal-color-background))!important}',
+      '[data-sidebar-terminal] .xterm .xterm-rows .xterm-cursor.xterm-cursor-outline{outline-color:var(--terminal-cursor,var(--dsh-terminal-color-foreground))!important}',
+      '[data-sidebar-terminal] .xterm .xterm-rows .xterm-cursor.xterm-cursor-bar{box-shadow:inset 1px 0 0 var(--terminal-cursor,var(--dsh-terminal-color-foreground))!important}',
+      '[data-sidebar-terminal] .xterm .xterm-rows .xterm-cursor.xterm-cursor-underline{border-bottom-color:var(--terminal-cursor,var(--dsh-terminal-color-foreground))!important}',
+      // The page uses the same field rhythm and type scale as the shipped
+      // plugin configuration forms.
+      '.dshTerminalFont_section{display:flex;flex-direction:column;gap:2px;padding:2px 0 10px}',
+      '.dshTerminalFont_section+.dshTerminalFont_section{border-top:.5px solid var(--dsw-alias-border-l2);padding-top:16px}',
+      '.dshTerminalFont_heading{margin:0;font-size:13px;font-weight:600;line-height:1.5;color:var(--dsw-alias-label-primary)}',
+      '.dshTerminalFont_field{display:flex;flex-direction:column;gap:6px;padding:12px 0}',
+      '.dshTerminalFont_field+.dshTerminalFont_field{border-top:.5px solid var(--dsw-alias-border-l2)}',
+      '.dshTerminalFont_label{font-size:13px;font-weight:500;line-height:1.5;color:var(--dsw-alias-label-primary)}',
+      '.dshTerminalFont_hint{margin:0;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary)}',
+      '.dshTerminalFont_preview{box-sizing:border-box;border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);overflow:auto;white-space:pre;padding:8px 12px;font-size:13px;line-height:1.5}',
+      '.dshTerminalFont_error{margin:0;font-size:12px;line-height:1.5;color:var(--dsw-alias-state-error-primary)}',
     ].join('')
 
     /** Install the plugin-owned stylesheet and return its removal callback. */
@@ -196,6 +227,76 @@ window.__ModuleLoader__.load({
         else storage.setItem(STORAGE_KEY, JSON.stringify(settings))
       } catch {
         // Private browsing or a full quota: the in-memory settings still work.
+      }
+    }
+
+    // Fixed terminal palettes use DSH's own static neutral steps, so they stay
+    // light/dark even while the other CSS tokens come from the opposite global
+    // theme. These mirror the shipped terminal's computed light/dark defaults.
+    const PALETTES = Object.freeze({
+      light: Object.freeze({
+        background: 'var(--dsw-static-neutral-bluish-00)',
+        foreground: 'var(--dsw-static-neutral-bluish-1000)',
+      }),
+      dark: Object.freeze({
+        background: 'var(--dsw-static-neutral-bluish-950)',
+        foreground: 'var(--dsw-static-neutral-bluish-50)',
+      }),
+    })
+
+    const PREFERENCES = Object.freeze(['light', 'dark', 'system'])
+
+    /**
+     * Normalize a persisted palette preference.
+     * @param {unknown} value - candidate preference.
+     * @returns {'light'|'dark'|'system'} a supported preference, defaulting to system.
+     */
+    function normalizePreference(value) {
+      return PREFERENCES.includes(value) ? value : 'system'
+    }
+
+    /**
+     * Build the scoped theme tokens for a fixed light/dark choice.
+     * "Follow appearance" publishes no override layer at all.
+     * @param {unknown} preference - light, dark, or system.
+     * @param {number} revision - monotonic value that forces a theme/change event.
+     * @returns {Record<string, {light: string, dark: string}>|undefined} override layer.
+     */
+    function buildThemeTokens(preference, revision) {
+      const choice = normalizePreference(preference)
+      if (choice === 'system') return undefined
+      const palette = PALETTES[choice]
+      return {
+        [BACKGROUND_VAR]: { light: palette.background, dark: palette.background },
+        [FOREGROUND_VAR]: { light: palette.foreground, dark: palette.foreground },
+        [REVISION_VAR]: { light: String(revision), dark: String(revision) },
+      }
+    }
+
+    /** @param {unknown} raw - localStorage value. @returns {'light'|'dark'|'system'} */
+    function parseStoredPreference(raw) {
+      return normalizePreference(raw)
+    }
+
+    /** @returns {'light'|'dark'|'system'} palette preference persisted in this browser. */
+    function readStoredPreference() {
+      try {
+        return parseStoredPreference(globalThis.localStorage?.getItem(COLOR_STORAGE_KEY))
+      } catch {
+        return 'system'
+      }
+    }
+
+    /** @param {'light'|'dark'|'system'} preference - current preference. */
+    function writeStoredPreference(preference) {
+      try {
+        const storage = globalThis.localStorage
+        if (storage === undefined) return
+        storage.removeItem(LEGACY_COLOR_STORAGE_KEY)
+        if (preference === 'system') storage.removeItem(COLOR_STORAGE_KEY)
+        else storage.setItem(COLOR_STORAGE_KEY, preference)
+      } catch {
+        // Private browsing or a full quota: the in-memory choice still works.
       }
     }
 
@@ -412,7 +513,21 @@ window.__ModuleLoader__.load({
 
     let currentSettings = readStoredSettings()
     let lastRawSettings = readRawSettings()
+    let currentPreference = readStoredPreference()
+    let lastRawPreference = readRawPreference()
+    let activeContext
+    let themeLayerDisposer
+    let revision = 0
     const listeners = new Set()
+
+    /** Raw palette value last observed, so an external write can be detected. */
+    function readRawPreference() {
+      try {
+        return globalThis.localStorage?.getItem(COLOR_STORAGE_KEY) ?? null
+      } catch {
+        return null
+      }
+    }
 
     /** Notify the mounted configuration page and re-adopt live terminals. */
     function notify() {
@@ -421,16 +536,47 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Pick up a settings value written outside this module — another tab, a
-     * devtools edit, or a same-document write that never fires a `storage`
-     * event. A no-op when the raw value is unchanged.
-     * @returns {boolean} whether the settings changed.
+     * Publish the selected fixed palette through the theme registry. Replacing
+     * the same source restacks the layer and emits `theme/change`, which is
+     * also the signal the shipped terminal uses to re-read its computed colors.
+     * @param {object} ctx - owning client context.
+     * @param {'light'|'dark'|'system'} preference - selected preference.
+     */
+    function syncThemeLayer(ctx, preference) {
+      if (typeof ctx?.theme?.overrideTokens !== 'function') return
+      revision += 1
+      const tokens = buildThemeTokens(preference, revision)
+      if (tokens === undefined) {
+        themeLayerDisposer?.()
+        themeLayerDisposer = undefined
+        return
+      }
+      themeLayerDisposer = ctx.theme.overrideTokens(THEME_SOURCE, tokens)
+    }
+
+    /**
+     * Pick up a font value written outside this module.
+     * @returns {boolean} whether the font settings changed.
      */
     function refreshFromStorage() {
       const raw = readRawSettings()
       if (raw === lastRawSettings) return false
       lastRawSettings = raw
       currentSettings = parseStoredSettings(raw ?? '')
+      notify()
+      return true
+    }
+
+    /**
+     * Pick up a palette value written outside this module.
+     * @returns {boolean} whether the preference changed.
+     */
+    function refreshPreferenceFromStorage() {
+      const raw = readRawPreference()
+      if (raw === lastRawPreference) return false
+      lastRawPreference = raw
+      currentPreference = parseStoredPreference(raw)
+      if (activeContext !== undefined) syncThemeLayer(activeContext, currentPreference)
       notify()
       return true
     }
@@ -461,7 +607,7 @@ window.__ModuleLoader__.load({
       }
     }
 
-    /** @param {() => void} listener - row subscription. @returns {() => void} unsubscribe. */
+    /** @param {() => void} listener - page subscription. @returns {() => void} unsubscribe. */
     function subscribe(listener) {
       listeners.add(listener)
       return () => {
@@ -470,7 +616,7 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Commit settings, persist them, and apply them to live terminals.
+     * Commit font settings, persist them, and apply them to live terminals.
      * @param {{family?:string,size?:number,lineHeight?:number}} next - proposed settings.
      */
     function commitSettings(next) {
@@ -485,6 +631,20 @@ window.__ModuleLoader__.load({
       currentSettings = normalized
       writeStoredSettings(currentSettings)
       lastRawSettings = readRawSettings()
+      notify()
+    }
+
+    /**
+     * Commit a palette preference, persist it, and publish the theme layer.
+     * @param {unknown} next - proposed preference.
+     */
+    function commitPreference(next) {
+      const normalized = normalizePreference(next)
+      if (normalized === currentPreference) return
+      currentPreference = normalized
+      writeStoredPreference(currentPreference)
+      lastRawPreference = readRawPreference()
+      if (activeContext !== undefined) syncThemeLayer(activeContext, currentPreference)
       notify()
     }
 
@@ -522,7 +682,7 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Validate and normalize the raw form draft.
+     * Validate and normalize the raw font form draft.
      * @param {{family:string,size:string,lineHeight:string}} draft - staged values.
      * @returns {{settings:{family?:string,size?:number,lineHeight?:number},sizeInvalid:boolean,lineHeightInvalid:boolean}} result.
      */
@@ -539,173 +699,188 @@ window.__ModuleLoader__.load({
       }
     }
 
+    /** The complete staged value of the configuration page. */
+    function pageDraft() {
+      return { ...draftOf(currentSettings), preference: currentPreference }
+    }
+
     /**
      * The component's own configuration page on
      * Plugins → @gitsang/dsh-qol → @gitsang/dsh-sidebar-terminal-enhance.
-     * The live preview follows the staged values; nothing is saved until Save.
+     * The live font preview follows the staged values; nothing is saved until
+     * the shared form's Save control is used.
      * @param {{ view?: string, t: (key: string) => string }} props - slot props.
      * @returns {import('react').ReactElement|string} the page or its one-liner.
      */
     function SidebarTerminalEnhanceConfig({ view, t }) {
-      const [current, setCurrent] = React.useState(() => draftOf(currentSettings))
-      const [draft, setDraft] = React.useState(() => draftOf(currentSettings))
-      const [error, setError] = React.useState(undefined)
+      const [current, setCurrent] = React.useState(pageDraft)
+      const [draft, setDraft] = React.useState(pageDraft)
+      const [sizeInvalid, setSizeInvalid] = React.useState(false)
+      const [lineHeightInvalid, setLineHeightInvalid] = React.useState(false)
       React.useEffect(() => subscribe(() => {
-        const next = draftOf(currentSettings)
+        const next = pageDraft()
         setCurrent(next)
         setDraft(next)
-        setError(undefined)
+        setSizeInvalid(false)
+        setLineHeightInvalid(false)
       }), [])
 
       if (view === 'summary') return t('summary')
 
-      const dirty = draft.family !== current.family || draft.size !== current.size || draft.lineHeight !== current.lineHeight
+      const dirty = draft.family !== current.family
+        || draft.size !== current.size
+        || draft.lineHeight !== current.lineHeight
+        || draft.preference !== current.preference
+      const parsed = normalizeDraft(draft)
+      const invalid = sizeInvalid || lineHeightInvalid
       const previewFont = normalizeFamily(draft.family) ?? FALLBACK_OPTIONS.fontFamily
       const update = (field, value) => {
         setDraft((previous) => ({ ...previous, [field]: value }))
-        setError(undefined)
+        if (field === 'size') setSizeInvalid(false)
+        if (field === 'lineHeight') setLineHeightInvalid(false)
       }
       const save = () => {
         if (!dirty) return
-        const parsed = normalizeDraft(draft)
         if (parsed.sizeInvalid) {
-          setError('invalidSize')
+          setSizeInvalid(true)
           return
         }
         if (parsed.lineHeightInvalid) {
-          setError('invalidLineHeight')
+          setLineHeightInvalid(true)
           return
         }
         commitSettings(parsed.settings)
-        const committed = draftOf(currentSettings)
+        commitPreference(draft.preference)
+        const committed = pageDraft()
         setCurrent(committed)
         setDraft(committed)
-        setError(undefined)
       }
-      const reset = () => {
-        setDraft({ family: '', size: '', lineHeight: '' })
-        setError(undefined)
+      const shell = {
+        available: true,
+        writable: true,
+        dirty,
+        invalid,
+        saving: false,
+        failed: false,
       }
-
       return React.createElement(
-        'div',
-        { className: 'dshTerminalFont_page', 'data-sidebar-terminal-enhance-config': true },
+        SettingsForm,
+        {
+          labels: {
+            unavailable: t('unavailable'),
+            readOnly: t('readOnly'),
+            saveFailed: t('saveFailed'),
+            save: t('save'),
+            saving: t('saving'),
+          },
+          state: shell,
+          onSave: save,
+          onDiscard: () => setDraft(current),
+        },
         React.createElement(
-          'div',
-          { className: 'dshTerminalFont_header' },
+          'section',
+          { className: 'dshTerminalFont_section', 'data-sidebar-terminal-enhance-config': true },
+          React.createElement('h3', { className: 'dshTerminalFont_heading' }, t('fontSection')),
+          React.createElement(SettingsValueField, {
+            id: 'terminal-font-family',
+            label: t('family'),
+            hint: t('familyHint'),
+            text: draft.family,
+            overridden: draft.family !== '',
+            overriddenLabel: t('overridden'),
+            resetLabel: t('reset'),
+            invalid: false,
+            invalidLabel: t('invalidSize'),
+            disabled: false,
+            placeholder: t('familyPlaceholder'),
+            onEdit: (value) => update('family', value),
+            onReset: () => update('family', ''),
+          }),
+          React.createElement(SettingsValueField, {
+            id: 'terminal-font-size',
+            label: t('size'),
+            hint: t('sizeHint'),
+            text: draft.size,
+            overridden: draft.size !== '',
+            overriddenLabel: t('overridden'),
+            resetLabel: t('reset'),
+            invalid: sizeInvalid,
+            invalidLabel: t('invalidSize'),
+            disabled: false,
+            numeric: true,
+            placeholder: String(FALLBACK_OPTIONS.fontSize),
+            onEdit: (value) => update('size', value),
+            onReset: () => update('size', ''),
+          }),
+          React.createElement(SettingsValueField, {
+            id: 'terminal-font-line-height',
+            label: t('lineHeight'),
+            hint: t('lineHeightHint'),
+            text: draft.lineHeight,
+            overridden: draft.lineHeight !== '',
+            overriddenLabel: t('overridden'),
+            resetLabel: t('reset'),
+            invalid: lineHeightInvalid,
+            invalidLabel: t('invalidLineHeight'),
+            disabled: false,
+            numeric: true,
+            placeholder: String(FALLBACK_OPTIONS.lineHeight),
+            onEdit: (value) => update('lineHeight', value),
+            onReset: () => update('lineHeight', ''),
+          }),
           React.createElement(
             'div',
-            { className: 'dshTerminalFont_copy' },
-            React.createElement('div', { className: 'dshTerminalFont_title' }, t('title')),
-            React.createElement('div', { className: 'dshTerminalFont_description' }, t('description')),
-          ),
-          React.createElement(
-            'button',
-            {
-              type: 'button',
-              className: 'dshTerminalFont_reset',
-              disabled: draft.family === '' && draft.size === '' && draft.lineHeight === '',
-              onClick: reset,
-            },
-            t('reset'),
-          ),
-        ),
-        React.createElement(
-          'div',
-          { className: 'dshTerminalFont_controls' },
-          React.createElement(
-            'label',
-            { className: 'dshTerminalFont_field dshTerminalFont_fieldWide' },
-            React.createElement('span', null, t('family')),
-            React.createElement('input', {
-              type: 'text',
-              className: 'dshTerminalFont_input',
-              value: draft.family,
-              placeholder: t('familyPlaceholder'),
-              spellCheck: false,
-              autoComplete: 'off',
-              'aria-label': t('familyAria'),
-              onChange: (event) => update('family', event.target.value),
-            }),
-          ),
-          React.createElement(
-            'label',
             { className: 'dshTerminalFont_field' },
-            React.createElement('span', null, t('size')),
-            React.createElement('input', {
-              type: 'number',
-              className: 'dshTerminalFont_input dshTerminalFont_number',
-              value: draft.size,
-              min: SIZE_MIN,
-              max: SIZE_MAX,
-              step: 1,
-              placeholder: String(FALLBACK_OPTIONS.fontSize),
-              'aria-label': t('sizeAria'),
-              'aria-invalid': error === 'invalidSize',
-              onChange: (event) => update('size', event.target.value),
-            }),
+            React.createElement('span', { className: 'dshTerminalFont_label' }, t('preview')),
+            React.createElement('div', {
+              className: 'dshTerminalFont_preview',
+              'aria-label': t('previewAria'),
+              style: { fontFamily: previewFont },
+            }, PREVIEW_GLYPHS),
           ),
+        ),
+        React.createElement(
+          'section',
+          { className: 'dshTerminalFont_section' },
+          React.createElement('h3', { className: 'dshTerminalFont_heading' }, t('colorSection')),
           React.createElement(
-            'label',
+            'div',
             { className: 'dshTerminalFont_field' },
-            React.createElement('span', null, t('lineHeight')),
-            React.createElement('input', {
-              type: 'number',
-              className: 'dshTerminalFont_input dshTerminalFont_number',
-              value: draft.lineHeight,
-              min: LINE_HEIGHT_MIN,
-              max: LINE_HEIGHT_MAX,
-              step: 0.05,
-              placeholder: String(FALLBACK_OPTIONS.lineHeight),
-              'aria-label': t('lineHeightAria'),
-              'aria-invalid': error === 'invalidLineHeight',
-              onChange: (event) => update('lineHeight', event.target.value),
+            React.createElement(SegmentedControl, {
+              id: 'terminal-color-preference',
+              value: draft.preference,
+              options: PREFERENCES.map((id) => ({ value: id, label: t(`choice.${id}`) })),
+              onChange: (value) => update('preference', value),
+              label: t('colorSection'),
             }),
-          ),
-        ),
-        React.createElement(
-          'div',
-          { className: 'dshTerminalFont_preview', 'aria-label': t('previewAria'), style: { fontFamily: previewFont } },
-          PREVIEW_GLYPHS,
-        ),
-        React.createElement('div', { className: 'dshTerminalFont_hint' }, t('hint')),
-        error === undefined ? null : React.createElement('p', { role: 'alert', className: 'dshTerminalFont_error' }, t(error)),
-        React.createElement(
-          'div',
-          { className: 'dshTerminalFont_actions' },
-          React.createElement(
-            'button',
-            {
-              type: 'button',
-              className: 'dshTerminalFont_save',
-              disabled: !dirty,
-              onClick: save,
-            },
-            t('save'),
+            React.createElement('p', { className: 'dshTerminalFont_hint' }, t('colorHint')),
           ),
         ),
       )
     }
 
-    const inject = ['slots', 'locale']
+    const inject = ['slots', 'locale', 'theme']
     const ROW_KEY = '@gitsang/dsh-qol#sidebar-terminal-enhance'
 
     /**
-     * Register the stylesheet, dictionaries, storage sync, terminal adoption
-     * and the component's Plugins row configuration page.
+     * Register the stylesheet, dictionaries, storage sync, terminal adoption,
+     * palette layer and the component's Plugins row configuration page.
      * @param {object} ctx - client context.
      */
     function apply(ctx) {
+      activeContext = ctx
       ctx.effect(
         () => {
           const removeStyles = installStyles()
           const onStorage = (event) => {
-            if (event.key !== STORAGE_KEY) return
-            refreshFromStorage()
+            if (event.key === STORAGE_KEY) refreshFromStorage()
+            if (event.key === COLOR_STORAGE_KEY) refreshPreferenceFromStorage()
           }
           globalThis.addEventListener?.('storage', onStorage)
+          if (currentPreference !== 'system') syncThemeLayer(ctx, currentPreference)
           const stopObserving = observeTerminals(() => {
             refreshFromStorage()
+            refreshPreferenceFromStorage()
             adoptMountedTerminals(currentSettings)
           })
           adoptMountedTerminals(currentSettings)
@@ -713,9 +888,12 @@ window.__ModuleLoader__.load({
             globalThis.removeEventListener?.('storage', onStorage)
             stopObserving()
             removeStyles?.()
+            themeLayerDisposer?.()
+            themeLayerDisposer = undefined
+            if (activeContext === ctx) activeContext = undefined
           }
         },
-        'sidebar-terminal-enhance: styles and adoption',
+        'sidebar-terminal-enhance: styles, palette and adoption',
       )
       ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'sidebar-terminal-enhance: dictionaries')
       ctx.slots.inject('plugins.row.config', () =>
@@ -735,8 +913,11 @@ window.__ModuleLoader__.load({
     exports.__test = {
       applyFont,
       adoptMountedTerminals,
+      buildThemeTokens,
+      commitPreference,
       commitSettings,
       findTerminal,
+      getPreference: () => currentPreference,
       getSettings: () => currentSettings,
       inspectFiberLane,
       isFitLike,
@@ -744,12 +925,17 @@ window.__ModuleLoader__.load({
       normalizeFamily,
       normalizeLineHeight,
       normalizeDraft,
+      normalizePreference,
       normalizeSettings,
       normalizeSize,
       originalOptions,
+      parseStoredPreference,
       parseStoredSettings,
+      PALETTES,
+      PREFERENCES,
       readRawSettings,
       refreshFromStorage,
+      refreshPreferenceFromStorage,
       refit,
       resetSettings,
       setFamily,
@@ -758,9 +944,11 @@ window.__ModuleLoader__.load({
       subscribe,
       SidebarTerminalEnhanceConfig,
       CSS,
+      COLOR_STORAGE_KEY,
       PREVIEW_GLYPHS,
       ROW_KEY,
       STORAGE_KEY,
+      THEME_SOURCE,
     }
     return module.exports
   },

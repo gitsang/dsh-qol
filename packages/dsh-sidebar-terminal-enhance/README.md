@@ -1,5 +1,5 @@
 ---
-description: "Set the right Sidebar terminal's font family, size and line height from the component's Plugins configuration page, without patching the shipped terminal bundle."
+description: "Customize the right Sidebar terminal from its Plugins configuration page: font family, size, line height, and palette, without patching the shipped terminal bundle."
 ---
 
 # @gitsang/dsh-sidebar-terminal-enhance
@@ -9,32 +9,29 @@ English | [中文](README.zh.md)
 ## Summary
 
 The shipped sidebar terminal builds its xterm emulator with a hard-coded font
-stack and offers no configuration:
+stack and follows the global DSH light/dark theme. It offers no configuration
+surface. This package adds one **Terminal** configuration page under
+**Plugins → @gitsang/dsh-qol → @gitsang/dsh-sidebar-terminal-enhance** with two
+groups:
 
-```js
-new Terminal({
-  fontSize: 13,
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-})
-```
+| Group | Field | Meaning |
+|---|---|---|
+| Font | Font family | Any installed CSS font-family list, e.g. `JetBrainsMono Nerd Font Mono` |
+| Font | Size | Integer 8–32 px |
+| Font | Line height | Multiplier 0.9–2, useful for icon-only glyph rows |
+| Palette | Mode | **Light**, **Dark**, or **Follow appearance** |
 
-That leaves Nerd Font users with tofu glyphs and no supported way to change it.
-This package adds a **Terminal font** configuration page under
-**Plugins → @gitsang/dsh-qol → @gitsang/dsh-sidebar-terminal-enhance** with
-three fields:
+Font changes apply to terminals that are already open, without reloading them,
+and both groups persist in the browser (`localStorage`) so they survive a page
+reload. Clearing every font field restores exactly what the shipped terminal
+used. Saving **Follow appearance** removes the palette override and lets the
+active DSH theme drive the terminal again.
 
-| Field | Meaning |
-|---|---|
-| Font family | Any installed CSS font-family list, e.g. `JetBrainsMono Nerd Font Mono` |
-| Size | Integer 8–32 px |
-| Line height | Multiplier 0.9–2, useful for icon-only glyph rows |
+The page uses the same `SettingsForm`, field, switch and segmented-control
+primitives as the official plugin configuration pages. Edits stay staged until
+**Save**; leaving the page discards them.
 
-Saving applies the changes to terminals that are already open, without
-reloading them, and persists them in the browser (`localStorage`) so they
-survive a page reload. **Reset to defaults** stages the shipped defaults; save
-to apply them.
-
-## Why not plain CSS?
+## Why the terminal needs more than plain CSS
 
 xterm measures its cell grid from `options.fontFamily` and `options.fontSize`.
 Overriding `.xterm-rows` with CSS would leave that grid on the old metrics, so
@@ -49,6 +46,11 @@ terminal.options.lineHeight = 1.2
 
 then re-runs the FitAddon and reports the new grid to the Host PTY, which is
 the same sequence the shipped body uses after a viewport resize.
+
+For color, the shipped terminal derives its xterm palette from the computed
+background and text color of its screen element. This package layers two scoped
+CSS variables over `[data-sidebar-terminal]` through the public theme override
+layer, so the cursor accent, selection and default cell colors stay consistent.
 
 ## Usage
 
@@ -68,18 +70,22 @@ Then:
    `JetBrainsMono Nerd Font Mono, Sarasa Term SC Nerd Font, monospace`.
    The family name is not the file name; check it with
    `fc-list : family | grep -i nerd` on Linux or Font Book on macOS.
-4. Use the preview line to confirm the icon glyphs render, then select **Save**.
+4. Choose a palette, use the preview line to confirm the icon glyphs render,
+   then select **Save**.
 
 ## Scope and behaviour
 
 - Only the right Sidebar's terminal screen is affected; the rest of the DSH
-  interface and the conversation code blocks keep their own fonts.
-- Blank fields keep the shipped defaults; the reset button clears every
-  override at once.
+  interface and the conversation code blocks keep their own fonts and theme.
+- Blank font fields keep the shipped defaults; **Reset to default** on each
+  field clears that override.
 - Font options are applied to each emulator once, when it mounts, through a
   `MutationObserver`. Terminals opened later pick up the current settings.
 - Changing the font re-fits the terminal and resizes the Host PTY, so full-screen
   programs see the correct dimensions.
+- The palette choice is stored under the historical
+  `@gitsang/dsh-terminal-color/preference` key, so a choice made before the two
+  terminal components were merged survives the upgrade.
 - The browser only resolves fonts installed on the client machine. A font
   installed on the dsh Host does nothing for a remote browser.
 
@@ -102,6 +108,6 @@ Then:
 node --test test/*.test.mjs
 ```
 
-The test suite exercises the option writer, the fiber walk, the settings
-normalisation and the persistence path against stand-in emulators; the browser
-integration is verified end-to-end in a running `dsh web`.
+The test suite exercises the option writer, the fiber walk, font settings
+normalisation, palette tokens, both persistence paths against stand-in
+emulators, and the configuration-page registration.

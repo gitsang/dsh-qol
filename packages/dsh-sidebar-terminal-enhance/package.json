@@ -1,7 +1,7 @@
 {
   "name": "@gitsang/dsh-sidebar-terminal-enhance",
   "version": "0.1.0",
-  "description": "Set the right Sidebar terminal’s font family, size and line height from the component’s Plugins configuration page.",
+  "description": "Customize the right Sidebar terminal from the component’s Plugins configuration page: font family, size, line height, and light/dark/follow-appearance palette.",
   "license": "MIT",
   "type": "module",
   "main": "src/index.js",
@@ -29,14 +29,19 @@
     "terminal-font",
     "nerd-font",
     "font",
-    "xterm"
+    "xterm",
+    "terminal-color",
+    "color",
+    "theme"
   ],
   "dsh": {
     "client": {
       "platform": "web",
       "inject": [
+        "@deepseek-ai/dsh-client-ui-primitives",
         "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-ui-plugin-manager"
+        "@deepseek-ai/dsh-client-ui-plugin-manager",
+        "@deepseek-ai/dsh-client-ui-theme"
       ]
     }
   },

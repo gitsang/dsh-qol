@@ -1,7 +1,7 @@
 {
   "name": "@gitsang/dsh-qol",
   "version": "0.1.0",
-  "description": "A quality-of-life bundle for DeepSeek Harness: Enter-key swap, statusline, onboarding skip, Auto review default, terminal reset, terminal colors, sidebar terminal font, and inline Session branch graphs in Trajectory.",
+  "description": "A quality-of-life bundle for DeepSeek Harness: Enter-key swap, statusline, onboarding skip, Auto review default, terminal reset, sidebar terminal font/palette, and inline Session branch graphs in Trajectory.",
   "license": "MIT",
   "type": "module",
   "main": "src/index.js",
@@ -34,13 +34,12 @@
     "composer",
     "permission",
     "terminal",
-    "terminal-color",
-    "font",
-    "nerd-font",
-    "terminal-font",
     "onboarding",
     "session-tree",
-    "branch"
+    "branch",
+    "font",
+    "nerd-font",
+    "terminal-font"
   ],
   "dsh": {
     "bundle": {
@@ -54,8 +53,7 @@
     "@gitsang/dsh-reset-terminals": "workspace:^",
     "@gitsang/dsh-session-tree": "workspace:^",
     "@gitsang/dsh-sidebar-terminal-enhance": "workspace:^",
-    "@gitsang/dsh-statusline": "workspace:^",
-    "@gitsang/dsh-terminal-color": "workspace:^"
+    "@gitsang/dsh-statusline": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.4"
