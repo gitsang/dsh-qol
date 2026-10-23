@@ -91,32 +91,15 @@ window.__ModuleLoader__.load({
       '.dst-modalActions{display:flex;justify-content:flex-end;gap:7px;flex-wrap:wrap}',
       '.dst-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:1300;max-width:min(620px,calc(100vw - 32px));box-sizing:border-box;border-radius:10px;padding:9px 13px;background:var(--dsw-alias-bg-layer-1,var(--dsw-alias-bg-primary));box-shadow:var(--dsw-elevation-prominent,0 10px 30px rgba(0,0,0,.24));color:var(--dsw-alias-label-primary);font-size:12px;line-height:18px}',
       '.dst-toast[data-error]{color:var(--dsw-alias-state-error-primary,#e5484d)}',
-      /* Inline Session graph inside the native Trajectory ledger. */
-      'table[data-dst-graph=on] > colgroup > col:first-child{min-width:84px}',
-      'table[data-dst-graph=on] td:first-child{position:relative;overflow:visible!important}',
-      'table[data-dst-graph=on] [data-role-kind]{box-sizing:border-box;width:19px!important;height:19px!important;min-width:19px!important;padding:0!important;justify-content:center!important;border-radius:6px!important;transform:translateX(var(--dst-lane-offset,0px));position:relative;z-index:2;outline:1.5px solid color-mix(in srgb,var(--dst-lane-color,#4b8dff) 55%,transparent);outline-offset:1px}',
-      'table[data-dst-graph=on] [data-role-kind] > span:last-child{display:none!important}',
-      'table[data-dst-graph=on] [data-role-kind] > span:first-child{display:inline-flex!important;width:13px!important;height:13px!important;opacity:1!important;transform:none!important}',
-      'table[data-dst-graph=on] [data-role-kind] > span:first-child svg{width:13px!important;height:13px!important}',
-      '.dstg-rowGraph{position:absolute;z-index:1;top:0;left:0;overflow:visible;pointer-events:none}',
-      '.dstg-rowGraph path{fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}',
-      '.dstg-synthRow{height:30px}',
-      '.dstg-synthRow > td{height:30px;border-bottom:.5px solid var(--dsw-alias-border-l1);background:color-mix(in srgb,var(--dst-lane-color,#4b8dff) 2.5%,transparent)}',
+      /* Branch-only Session rows inside the native Trajectory ledger. */
+      '.dstg-synthRow > td{height:30px;padding:0 8px;border-bottom:.5px solid var(--dsw-alias-border-l1);background:transparent;overflow:hidden}',
       '.dstg-synthRow:hover > td{background:var(--dsw-alias-interactive-bg-hover)}',
-      'tr[data-dst-lane] > td:first-child{position:relative;overflow:visible!important}',
-      '.dstg-synthEvent{position:relative;height:30px;min-width:0}',
-      '.dstg-node{position:absolute;z-index:2;box-sizing:border-box;width:19px;height:19px;margin:-9.5px 0 0 -9.5px;display:grid;place-items:center;border:1.5px solid var(--dst-lane-color,#4b8dff);border-radius:6px;background:color-mix(in srgb,var(--dst-lane-color,#4b8dff) 8%,var(--dsw-alias-bg-layer-1));color:var(--dst-lane-color,#4b8dff);box-shadow:0 0 0 2px var(--dsw-alias-bg-layer-1)}',
-      '.dstg-node svg{display:block;width:12px;height:12px}',
-      '.dstg-synthContent{display:flex;align-items:center;gap:6px;min-width:0;padding:0 8px 0 4px;overflow:hidden;color:var(--dsw-alias-label-primary);font-size:11px;line-height:18px;white-space:nowrap}',
-      '.dstg-synthRole{flex:none;color:var(--dsw-alias-label-tertiary);font-size:9.5px}',
-      '.dstg-synthText{min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--dsw-alias-label-secondary)}',
-      '.dstg-synthSeq{flex:none;margin-left:auto;color:var(--dsw-alias-label-tertiary);font:9.5px var(--ds-font-family-code);font-variant-numeric:tabular-nums}',
-      '.dstg-branchChip{display:inline-flex;flex:none;align-items:center;gap:4px;height:16px;padding:0 5px;border:1px solid color-mix(in srgb,var(--dst-lane-color,#4b8dff) 30%,transparent);border-radius:999px;background:color-mix(in srgb,var(--dst-lane-color,#4b8dff) 9%,transparent);color:color-mix(in srgb,var(--dst-lane-color,#4b8dff) 82%,var(--dsw-alias-label-primary));font-size:9px;line-height:1}',
-      '.dstg-branchChip::before{content:"";width:4px;height:4px;border-radius:50%;background:var(--dst-lane-color,#4b8dff)}',
-      '.dstg-forkNote{flex:none;color:var(--dsw-alias-label-tertiary);font-size:9px;font-variant-numeric:tabular-nums}',
+      '.dstg-synthCell{padding-top:0!important;padding-bottom:0!important}',
+      '.dstg-treeRow{display:flex;align-items:center;gap:6px;height:29px;min-width:0;overflow:hidden}',
+      '.dstg-treePrefix{flex:none;white-space:pre;color:var(--dsw-alias-label-tertiary);font:11px/1 var(--ds-font-family-code);font-variant-ligatures:none;user-select:none}',
+      '.dstg-synthRow .dstg-treeRow > span:nth-child(2){pointer-events:none;user-select:none}',
       '.dstg-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:1300;max-width:min(620px,calc(100vw - 32px));box-sizing:border-box;border-radius:10px;padding:9px 13px;background:var(--dsw-alias-bg-layer-1,var(--dsw-alias-bg-primary));box-shadow:var(--dsw-elevation-prominent,0 10px 30px rgba(0,0,0,.24));color:var(--dsw-alias-label-primary);font-size:12px;line-height:18px}',
       '.dstg-toast[data-error]{color:var(--dsw-alias-state-error-primary,#e5484d)}',
-      '@media (prefers-reduced-motion:no-preference){table[data-dst-graph=on] [data-role-kind]{transition:transform .18s var(--ds-ease-in-out)}}',
     ].join('')
 
     function realGlobal() {
@@ -220,12 +203,10 @@ window.__ModuleLoader__.load({
       }
     }
 
-    const LANE_COLORS = ['#4b8dff', '#8f6bff', '#e35d83', '#20a464', '#c98a00', '#2aa8b8']
-    const LANE_STEP = 24
-
-    function laneColor(lane) {
-      return LANE_COLORS[Math.max(0, lane) % LANE_COLORS.length]
-    }
+    const TREE_GUIDE = '│   '
+    const TREE_BLANK = '    '
+    const TREE_FIRST = '├⊟  '
+    const TREE_LAST = '└⊟  '
 
     function familyChildren(data) {
       const byId = new Map((data?.sessions ?? []).map((session) => [session.sessionId, session]))
@@ -254,25 +235,13 @@ window.__ModuleLoader__.load({
       return chain
     }
 
-    function ownerAtSeq(chain, seq) {
-      if (!Array.isArray(chain) || chain.length === 0 || !Number.isSafeInteger(seq)) return null
-      let ownerIndex = 0
-      for (let index = 1; index < chain.length; index += 1) {
-        const inherited = chain[index]?.inheritedEventCount
-        if (Number.isSafeInteger(inherited) && seq >= inherited) ownerIndex = index
-        else break
-      }
-      return { session: chain[ownerIndex], lane: ownerIndex }
-    }
-
     function descendantBranches(data, currentId) {
       const { byId, children } = familyChildren(data)
       if (!byId.has(currentId)) return []
-      const baseDepth = Math.max(0, chainTo(data, currentId).length - 1)
       const result = []
       const visit = (parentId, depth, seen) => {
-        for (const childId of children.get(parentId) ?? []) {
-          if (seen.has(childId)) continue
+        const bucket = (children.get(parentId) ?? []).filter((childId) => !seen.has(childId))
+        for (const [index, childId] of bucket.entries()) {
           const nextSeen = new Set(seen)
           nextSeen.add(childId)
           const session = byId.get(childId)
@@ -280,13 +249,16 @@ window.__ModuleLoader__.load({
             sessionId: childId,
             parentSessionId: parentId,
             depth,
+            siblingIndex: index,
+            siblingCount: bucket.length,
+            lastSibling: index === bucket.length - 1,
             forkAtSeq: Number.isSafeInteger(session?.forkAtSeq) ? session.forkAtSeq : null,
             events: Array.isArray(session?.events) ? session.events : [],
           })
           visit(childId, depth + 1, nextSeen)
         }
       }
-      visit(currentId, baseDepth + 1, new Set([currentId]))
+      visit(currentId, 1, new Set([currentId]))
       return result
     }
 
@@ -296,153 +268,101 @@ window.__ModuleLoader__.load({
       try { return decodeURIComponent(raw) } catch { return raw }
     }
 
-    const ROLE_ICON = {
-      user: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"><circle cx="8" cy="5.2" r="2.5"/><path d="M3.4 13c.5-2.6 2.2-4 4.6-4s4.1 1.4 4.6 4"/></svg>',
-      assistant: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"><path d="M8 2.2c.4 3.1 2.7 5.4 5.8 5.8-3.1.4-5.4 2.7-5.8 5.8C7.6 10.7 5.3 8.4 2.2 8 5.3 7.6 7.6 5.3 8 2.2Z"/></svg>',
-      tool: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M13.7 3.4a3.5 3.5 0 0 1-4.4 4.4L4.4 12.7a1.5 1.5 0 1 1-2.1-2.1l4.9-4.9a3.5 3.5 0 0 1 4.4-4.4l-2.1 2.1 2.1 2.1 2.1-2.1Z"/></svg>',
-      'tool-result': '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"><path d="M4 2.4h5.2L12 5.2v8.4H4V2.4Z"/><path d="M9 2.6v3h3M6 8h4M6 10.5h4"/></svg>',
-      context: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"><circle cx="8" cy="8" r="5.8"/><path d="M8 7.2v4M8 4.8v.2"/></svg>',
-      'turn-end': '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="m3.6 8.2 2.9 2.9 6-6"/></svg>',
-      retry: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M13 5.4A5.4 5.4 0 1 0 13.2 10"/><path d="M13 2.7v3.1H9.9"/></svg>',
-      compaction: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="m2.5 2.5 3.7 3.7M3 6.2h3.2V3M13.5 2.5 9.8 6.2M13 6.2H9.8V3M2.5 13.5l3.7-3.7M3 9.8h3.2V13M13.5 13.5l-3.7-3.7M13 9.8H9.8V13"/></svg>',
+    /** Only rows that carry a useful branch narrative; results and turn ends are noise here. */
+    function visibleBranchEvents(events) {
+      return (Array.isArray(events) ? events : []).filter((event) =>
+        event !== null
+        && typeof event === 'object'
+        && (event.role === 'user' || event.role === 'assistant' || event.role === 'tool' || event.role === 'compaction'))
     }
 
-    function roleIcon(role) {
-      return ROLE_ICON[role] ?? ROLE_ICON.context
+    function treePrefix(depth, ancestorGuides, lastSibling, firstRow) {
+      let prefix = ''
+      for (const continued of ancestorGuides) prefix += continued ? TREE_GUIDE : TREE_BLANK
+      if (firstRow) return prefix + (lastSibling ? TREE_LAST : TREE_FIRST)
+      return prefix + (lastSibling ? TREE_BLANK : TREE_GUIDE)
     }
 
-    function ensureRowGraph(td, spec) {
-      const g = realGlobal()
-      if (g === null || g.document === undefined) return
-      let svg = td.querySelector(':scope > svg.dstg-rowGraph')
-      if (svg === null) {
-        svg = g.document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-        svg.setAttribute('class', 'dstg-rowGraph')
-        svg.setAttribute('aria-hidden', 'true')
-        td.prepend(svg)
-      }
-      const height = Math.max(1, spec.height)
-      const width = Math.max(1, spec.width)
-      svg.setAttribute('width', String(width))
-      svg.setAttribute('height', String(height))
-      svg.setAttribute('viewBox', `0 0 ${width} ${height}`)
-      svg.style.width = `${width}px`
-      svg.style.height = `${height}px`
-      while (svg.firstChild !== null) svg.removeChild(svg.firstChild)
-      const addPath = (d, lane) => {
-        const path = g.document.createElementNS('http://www.w3.org/2000/svg', 'path')
-        path.setAttribute('d', d)
-        path.setAttribute('stroke', laneColor(lane))
-        path.setAttribute('opacity', '0.66')
-        svg.appendChild(path)
-      }
-      const centerY = height / 2
-      const active = new Set(spec.activeLanes)
-      for (const lane of spec.activeLanes) {
-        const x = spec.baseX + lane * LANE_STEP
-        const endY = spec.endAtNode && lane === spec.lane ? centerY : height
-        addPath(`M${x} 0 L${x} ${endY}`, lane)
-      }
-      // Stop a parent lane at the fork point when it has no later row.
-      if (spec.forkFrom !== null && spec.forkFrom !== undefined && !active.has(spec.forkFrom)) {
-        const x = spec.baseX + spec.forkFrom * LANE_STEP
-        addPath(`M${x} 0 L${x} ${centerY}`, spec.forkFrom)
-      }
-      if (spec.forkFrom !== null && spec.forkFrom !== undefined) {
-        const fromX = spec.baseX + spec.forkFrom * LANE_STEP
-        const toX = spec.baseX + spec.lane * LANE_STEP
-        addPath(
-          `M${fromX} 0 C${fromX} ${centerY * 1.15} ${toX} ${centerY * 0.55} ${toX} ${centerY}`,
-          spec.forkFrom,
-        )
+    function nativeKindForRole(role) {
+      switch (role) {
+        case 'user': return 'user'
+        case 'assistant': return 'message'
+        case 'tool': return 'tool'
+        case 'compaction': return 'compacted'
+        default: return 'context'
       }
     }
 
-    function applyNativeRowGraph(tr, spec) {
-      const td = tr.firstElementChild
-      if (td === null) return
-      const tag = tr.querySelector('[data-role-kind]')
-      if (tag === null) return
-      const height = tr.getBoundingClientRect().height || 30
-      const slot = tag.parentElement
-      if (slot !== null) slot.style.transform = `translateX(${-spec.maxLane * LANE_STEP}px)`
-      tag.style.setProperty('--dst-lane-offset', `${spec.lane * LANE_STEP}px`)
-      tag.style.setProperty('--dst-lane-color', laneColor(spec.lane))
-      tr.dataset.dstLane = String(spec.lane)
-      tr.dataset.dstLaneColor = laneColor(spec.lane)
-      tr.dataset.dstSession = spec.sessionId
-      tr.dataset.dstSeq = String(spec.seq)
-      const baseX = spec.eventColumnWidth - 5.5 - spec.maxLane * LANE_STEP
-      ensureRowGraph(td, {
-        width: spec.eventColumnWidth,
-        height,
-        baseX,
-        lane: spec.lane,
-        activeLanes: spec.activeLanes,
-        forkFrom: spec.forkFrom,
-        endAtNode: false,
-      })
+    function collectNativeTemplates(table) {
+      const pills = new Map()
+      const contents = new Map()
+      for (const tr of table.querySelectorAll('tbody tr[data-kind]')) {
+        const kind = tr.getAttribute('data-kind')
+        if (kind === null || pills.has(kind)) continue
+        const tag = tr.querySelector('[data-role-kind]')
+        if (tag === null || tag.parentElement === null) continue
+        pills.set(kind, tag.parentElement.cloneNode(true))
+        const content = tr.querySelector('td:last-child > span')
+        if (content !== null) contents.set(kind, content.cloneNode(true))
+      }
+      return { pills, contents }
+    }
+
+    function cleanPillClone(pill) {
+      pill.removeAttribute('style')
+      pill.style.setProperty('display', 'inline-flex', 'important')
+      pill.style.setProperty('width', 'auto', 'important')
+      pill.style.setProperty('flex', 'none', 'important')
+      pill.style.setProperty('align-items', 'center', 'important')
+      pill.style.setProperty('justify-content', 'flex-start', 'important')
+      const tag = pill.querySelector('[data-role-kind]')
+      if (tag !== null) tag.removeAttribute('style')
+      return pill
     }
 
     function createSynthRow(doc, spec) {
+      const kind = nativeKindForRole(spec.event.role)
+      const sourcePill = spec.templates.pills.get(kind)
+        ?? spec.templates.pills.get('message')
+        ?? spec.templates.pills.get('context')
+      const sourceContent = spec.templates.contents.get(kind)
+        ?? spec.templates.contents.get('message')
+        ?? spec.templates.contents.get('context')
+      if (sourcePill === undefined || sourceContent === undefined) return null
+
       const tr = doc.createElement('tr')
       tr.className = 'dstg-synthRow'
       tr.dataset.dstSynth = '1'
       tr.dataset.dstSession = spec.sessionId
       tr.dataset.dstSeq = String(spec.seq)
-      tr.dataset.dstLane = String(spec.lane)
-      tr.dataset.dstLaneColor = laneColor(spec.lane)
-      tr.dataset.dstLaneColor = laneColor(spec.lane)
-      tr.style.setProperty('--dst-lane-color', laneColor(spec.lane))
-      const eventTd = doc.createElement('td')
-      eventTd.className = 'dstg-synthEvent'
-      const contentTd = doc.createElement('td')
-      contentTd.className = 'dstg-synthContent'
-      const inner = doc.createElement('div')
-      inner.className = 'dstg-synthContent'
-      contentTd.appendChild(inner)
+      tr.title = spec.branchTitle
+      tr.setAttribute('aria-label', `${t(`role.${spec.event.role}`)}: ${spec.event.text}`)
 
-      const baseX = spec.eventColumnWidth - 5.5 - spec.maxLane * LANE_STEP
-      const node = doc.createElement('span')
-      node.className = 'dstg-node'
-      node.style.left = `${baseX + spec.lane * LANE_STEP}px`
-      node.style.top = '15px'
-      node.style.setProperty('--dst-lane-color', laneColor(spec.lane))
-      node.innerHTML = roleIcon(spec.event.role)
-      eventTd.appendChild(node)
-      ensureRowGraph(eventTd, {
-        width: spec.eventColumnWidth,
-        height: 30,
-        baseX,
-        lane: spec.lane,
-        activeLanes: spec.activeLanes,
-        forkFrom: spec.forkFrom,
-        endAtNode: spec.branchEnd,
-      })
+      const cell = doc.createElement('td')
+      cell.colSpan = 2
+      cell.className = 'dstg-synthCell'
+      const line = doc.createElement('div')
+      line.className = 'dstg-treeRow'
 
-      if (spec.branchStart) {
-        const chip = doc.createElement('span')
-        chip.className = 'dstg-branchChip'
-        chip.style.setProperty('--dst-lane-color', laneColor(spec.lane))
-        chip.textContent = spec.branchTitle
-        inner.appendChild(chip)
-        const note = doc.createElement('span')
-        note.className = 'dstg-forkNote'
-        note.textContent = spec.forkAtSeq === null ? '' : `#${spec.forkAtSeq}`
-        if (note.textContent !== '') inner.appendChild(note)
-      }
-      const role = doc.createElement('span')
-      role.className = 'dstg-synthRole'
-      role.textContent = t(`role.${spec.event.role}`)
-      const text = doc.createElement('span')
-      text.className = 'dstg-synthText'
-      text.textContent = spec.event.text === '' ? t('noEvents') : spec.event.text
-      text.title = spec.event.text
-      const seq = doc.createElement('span')
-      seq.className = 'dstg-synthSeq'
-      seq.textContent = `#${spec.seq}`
-      inner.append(role, text, seq)
-      tr.append(eventTd, contentTd)
+      const prefix = doc.createElement('span')
+      prefix.className = 'dstg-treePrefix'
+      prefix.setAttribute('aria-hidden', 'true')
+      prefix.textContent = spec.prefix
+
+      const pill = cleanPillClone(sourcePill.cloneNode(true))
+      const content = sourceContent.cloneNode(true)
+      const text = spec.event.text === '' ? t('noEvents') : spec.event.text
+      content.textContent = text
+      content.setAttribute('title', text)
+      content.style.setProperty('min-width', '0')
+      content.style.setProperty('overflow', 'hidden')
+      content.style.setProperty('text-overflow', 'ellipsis')
+      content.style.setProperty('white-space', 'nowrap')
+      content.style.setProperty('flex', '1')
+
+      line.append(prefix, pill, content)
+      cell.appendChild(line)
+      tr.appendChild(cell)
       return tr
     }
 
@@ -494,22 +414,9 @@ window.__ModuleLoader__.load({
 
         const clearGraph = () => {
           doc.querySelectorAll('tr[data-dst-synth]').forEach((element) => element.remove())
-          doc.querySelectorAll('svg.dstg-rowGraph').forEach((element) => element.remove())
-          doc.querySelectorAll('[data-dst-lane]').forEach((element) => {
-            element.removeAttribute('data-dst-lane')
-            element.removeAttribute('data-dst-lane-color')
+          doc.querySelectorAll('[data-dst-session]').forEach((element) => {
             element.removeAttribute('data-dst-session')
             element.removeAttribute('data-dst-seq')
-          })
-          doc.querySelectorAll('table[data-dst-graph=on] [data-role-kind]').forEach((element) => {
-            element.style.removeProperty('--dst-lane-offset')
-            element.style.removeProperty('--dst-lane-color')
-            if (element.parentElement !== null) element.parentElement.style.removeProperty('transform')
-          })
-          doc.querySelectorAll('table[data-dst-graph=on]').forEach((table) => {
-            table.removeAttribute('data-dst-graph')
-            const col = table.querySelector('colgroup > col:first-child')
-            if (col !== null) col.style.removeProperty('width')
           })
         }
 
@@ -528,58 +435,17 @@ window.__ModuleLoader__.load({
           const chain = chainTo(data, sessionId)
           if (chain.length === 0) return
           const descendants = descendantBranches(data, sessionId)
-          const maxLane = Math.max(chain.length - 1, ...descendants.map((branch) => branch.depth), 0)
-          const eventColumnWidth = 84 + maxLane * LANE_STEP
-          table.setAttribute('data-dst-graph', 'on')
-          const col = table.querySelector('colgroup > col:first-child')
-          if (col !== null) col.style.width = `${eventColumnWidth}px`
-
+          const templates = collectNativeTemplates(table)
+          // Mark native rows with the durable event they represent so branch
+          // anchors can be found without changing their appearance.
           const eventIndex = current.eventIndex ?? {}
-          const firstSeqByLane = new Map()
-          const lastSeqByLane = new Map()
-          for (const info of Object.values(eventIndex)) {
-            if (!info || !Number.isSafeInteger(info.seq)) continue
-            const owner = ownerAtSeq(chain, info.seq)
-            if (owner === null) continue
-            const previousFirst = firstSeqByLane.get(owner.lane)
-            if (previousFirst === undefined || info.seq < previousFirst) firstSeqByLane.set(owner.lane, info.seq)
-            const previousLast = lastSeqByLane.get(owner.lane)
-            if (previousLast === undefined || info.seq > previousLast) lastSeqByLane.set(owner.lane, info.seq)
-          }
-          const nativeActiveLanes = (lane, seq) => {
-            const lanes = []
-            for (let index = 0; index <= lane; index += 1) {
-              if (index === lane || (lastSeqByLane.get(index) ?? -1) > seq) lanes.push(index)
-            }
-            return lanes
-          }
-
-          const renderedNative = new Set()
           for (const tr of tbody.querySelectorAll('tr[data-trajectory-row-key]')) {
             if (tr.hasAttribute('data-dst-synth')) continue
-            const key = decodeTrajectoryKey(tr)
-            const info = eventIndex[key]
-            if (info === undefined) continue
-            const owner = ownerAtSeq(chain, info.seq)
-            if (owner === null) continue
-            const lane = owner.lane
-            const forkFrom = lane > 0 && firstSeqByLane.get(lane) === info.seq ? lane - 1 : null
-            applyNativeRowGraph(tr, {
-              eventColumnWidth,
-              maxLane,
-              lane,
-              activeLanes: nativeActiveLanes(lane, info.seq),
-              forkFrom,
-              sessionId: owner.session.sessionId,
-              seq: info.seq,
-            })
-            renderedNative.add(tr)
+            const info = eventIndex[decodeTrajectoryKey(tr)]
+            if (info === undefined || !Number.isSafeInteger(info.seq)) continue
+            tr.dataset.dstSession = sessionId
+            tr.dataset.dstSeq = String(info.seq)
           }
-
-          const clearSynth = () => {
-            tbody.querySelectorAll('tr[data-dst-synth]').forEach((element) => element.remove())
-          }
-          clearSynth()
 
           const children = new Map()
           for (const branch of descendants) {
@@ -596,11 +462,17 @@ window.__ModuleLoader__.load({
             .filter((row) => typeof row.sessionId === 'string' && Number.isSafeInteger(row.seq))
 
           const findAnchor = (parentSessionId, forkAtSeq) => {
-            const rows = visibleRows().filter((row) => row.sessionId === parentSessionId)
+            if (!Number.isSafeInteger(forkAtSeq)) return null
+            const parentRows = visibleRows().filter((row) => row.sessionId === parentSessionId)
+            if (parentRows.length === 0) return null
+            const maxSeq = Math.max(...parentRows.map((row) => row.seq))
+            // The fork boundary must have entered the mounted window; otherwise
+            // the row we see after it is not the final anchor yet.
+            if (forkAtSeq > maxSeq) return null
             let best = null
             let bestSeq = -1
-            for (const row of rows) {
-              if (Number.isSafeInteger(forkAtSeq) && row.seq > forkAtSeq) continue
+            for (const row of parentRows) {
+              if (row.seq > forkAtSeq) continue
               if (row.seq >= bestSeq) {
                 bestSeq = row.seq
                 best = row.row
@@ -609,59 +481,47 @@ window.__ModuleLoader__.load({
             return best
           }
 
-          const insertBranch = (branch, insertionRow) => {
-            // A branch is only drawn when its fork anchor is currently in the
-            // virtualized window. Guessing a top-of-table position would put
-            // the branch at the wrong point in the timeline.
+          const insertBranch = (branch, insertionRow, ancestorGuides) => {
             if (insertionRow === null || insertionRow.parentNode === null) return null
-            let cursor = insertionRow
-            const anchorSeq = Number(insertionRow.getAttribute('data-dst-seq'))
-            const parentHasLater = visibleRows().some((row) =>
-              row.sessionId === branch.parentSessionId
-              && Number.isSafeInteger(row.seq)
-              && row.seq > (Number.isSafeInteger(anchorSeq) ? anchorSeq : -1))
-            const events = branch.events.length > 0
-              ? branch.events
+            const events = visibleBranchEvents(branch.events)
+            const rows = events.length > 0
+              ? events
               : [{ seq: branch.forkAtSeq ?? 0, role: 'context', text: '', turn: null }]
             const fragment = doc.createDocumentFragment()
-            let lastRow = null
-            for (const [index, event] of events.entries()) {
+            for (const [index, event] of rows.entries()) {
               const row = createSynthRow(doc, {
-                eventColumnWidth,
-                maxLane,
-                lane: branch.depth,
-                activeLanes: parentHasLater
-                  ? Array.from({ length: branch.depth + 1 }, (_, lane) => lane)
-                  : [branch.depth],
-                forkFrom: index === 0 && branch.depth > 0 ? branch.depth - 1 : null,
-                branchStart: index === 0,
-                branchEnd: index === events.length - 1,
+                templates,
+                prefix: treePrefix(branch.depth, ancestorGuides, branch.lastSibling, index === 0),
                 branchTitle: sessionTitle(list, branch.sessionId),
-                forkAtSeq: branch.forkAtSeq,
                 sessionId: branch.sessionId,
-                seq: Number.isSafeInteger(event.seq) ? event.seq : 0,
+                seq: Number.isSafeInteger(event.seq) ? event.seq : (branch.forkAtSeq ?? 0),
                 event,
               })
-              fragment.appendChild(row)
-              lastRow = row
+              if (row !== null) fragment.appendChild(row)
             }
-            cursor.after(fragment)
-            const branchRows = [...tbody.querySelectorAll(`tr[data-dst-synth][data-dst-session="${CSS.escape(branch.sessionId)}"]`)]
-            const ownLast = branchRows.at(-1) ?? lastRow
-            let siblingCursor = ownLast
+            insertionRow.after(fragment)
+
+            let last = insertionRow
+            for (const row of fragment.querySelectorAll?.('tr') ?? []) last = row
+            // DocumentFragment empties after insertion; locate inserted rows directly.
+            const inserted = [...tbody.querySelectorAll('tr[data-dst-synth]')].filter((row) => row.dataset.dstSession === branch.sessionId)
+            last = inserted.at(-1) ?? last
+
+            let siblingCursor = last
             let siblingAnchor = null
+            const nextGuides = [...ancestorGuides, !branch.lastSibling]
             for (const child of children.get(branch.sessionId) ?? []) {
               const anchor = findAnchor(branch.sessionId, child.forkAtSeq)
               const effectiveAnchor = anchor !== null && anchor === siblingAnchor && siblingCursor?.parentNode !== null
                 ? siblingCursor
                 : anchor
-              const inserted = insertBranch(child, effectiveAnchor)
-              if (inserted !== null) {
+              const insertedLast = insertBranch(child, effectiveAnchor, nextGuides)
+              if (insertedLast !== null) {
                 siblingAnchor = anchor
-                siblingCursor = inserted
+                siblingCursor = insertedLast
               }
             }
-            return siblingCursor ?? ownLast
+            return siblingCursor ?? last
           }
 
           let siblingCursor = null
@@ -671,10 +531,10 @@ window.__ModuleLoader__.load({
             const effectiveAnchor = anchor !== null && anchor === siblingAnchor && siblingCursor?.parentNode !== null
               ? siblingCursor
               : anchor
-            const inserted = insertBranch(branch, effectiveAnchor)
-            if (inserted !== null) {
+            const insertedLast = insertBranch(branch, effectiveAnchor, [])
+            if (insertedLast !== null) {
               siblingAnchor = anchor
-              siblingCursor = inserted
+              siblingCursor = insertedLast
             }
           }
         }
@@ -685,7 +545,7 @@ window.__ModuleLoader__.load({
             frame = 0
             if (disposed) return
             injecting = true
-            try { apply() } catch (error) { console.warn('[dsh-session-tree] graph injection failed', error) }
+            try { apply() } catch (error) { console.warn('[dsh-session-tree] branch tree injection failed', error) }
             clearTimeout(timer)
             timer = g.setTimeout(() => { injecting = false }, 0)
           })

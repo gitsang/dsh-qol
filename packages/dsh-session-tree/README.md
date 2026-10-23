@@ -4,8 +4,8 @@ A DSH Web component that draws Session branch lineage directly inside the native
 
 ## What it does
 
-- **Inline branch graph** — Trajectory event icons become graph nodes, connected by branch-colored lines.
-- **Fork indentation** — the first row of a descendant Session is indented one lane and anchored after the parent event it forked from.
+- **Branch-only tree rows** — native Trajectory rows keep their original pill and text; descendant Sessions are appended only at their fork points as indented tree rows.
+- **Same pill styling** — branch rows reuse the host's rendered kind pill and content presentation, with `├⊟` / `└⊟` connectors and `│` guides only where a branch exists.
 - **Fork from any event** — every visible event row has a `Fork after` action; the inspector also accepts an exact event sequence.
 - **Edit a sent message** — the pencil sits beside the Host's own Copy button on every user message. The Host forks from the event immediately before that Turn, then sends the edited prompt into the new Session.
 - **No Chat renderer replacement** — the component adds two sibling buttons to the native action row and leaves Copy and every other host control intact.
@@ -34,7 +34,7 @@ Restart the profile after installing; refresh the browser after UI-only changes.
 ## Use
 
 1. Open a conversation and switch to **Trajectory**.
-2. Event icons are joined into a graph; descendant branches appear as indented lanes after their fork point.
+2. Descendant branches appear as indented `├⊟` / `└⊟` rows after their fork point; unaffected rows are untouched.
 3. To edit a past message: use the pencil beside the native Copy button on a user message. Saving forks the conversation from before that Turn and sends the edited text.
 4. To fork from the latest event of the current branch, use the branch action on a user message.
 
