@@ -15,7 +15,7 @@ dsh 自带的右侧栏终端把字体写死在 xterm 初始化参数里，并且
 
 | 分组 | 字段 | 含义 |
 |---|---|---|
-| 字体 | 字体族 | 任意已安装的 CSS 字体族列表，例如 `JetBrainsMono Nerd Font Mono` |
+| 字体 | 字体族 | 可搜索下拉框，列表来自宿主机已安装字体；也支持手动输入 CSS 字体族列表 |
 | 字体 | 字号 | 整数 8–32 px |
 | 字体 | 行高 | 0.9–2 的倍数，图标行太挤时有用 |
 | 主体色 | 模式 | **浅色**、**深色** 或 **跟随外观** |
@@ -26,6 +26,35 @@ dsh 自带的右侧栏终端把字体写死在 xterm 初始化参数里，并且
 
 配置页使用与官方插件配置页相同的 `SettingsForm`、字段、开关和分段控件；修改在点
 **保存** 前只停留在表单里，离开页面即丢弃。
+
+### 字体列表
+
+字体族字段会从宿主机读取真实字体目录，不用再猜族名：
+
+- 输入即过滤：先按子串命中，再按模糊子序列匹配；
+- `↑` / `↓` 移动、`Enter` 选中、`Esc` 关闭；
+- 右侧下拉按钮手动展开列表；
+- **仅等宽** 只保留宿主机报告为等宽的字体；
+- 选中的字体替换最后一个逗号分段，所以仍可手工拼出
+  `JetBrainsMono Nerd Font Mono, Sarasa Term SC Nerd Font, monospace` 这样的回退栈；
+- **刷新列表** 重新枚举宿主机字体。
+
+Host 半身提供一条同源路由：
+
+```text
+GET /sidebar-terminal-enhance/fonts[?refresh=1]
+→ { ok: true, source: "fc-list", cached: false,
+    fonts: [{ family: "DejaVu Sans Mono", monospace: true }, …] }
+```
+
+它调用平台自带工具：Linux 与 macOS 优先用 `fc-list`（fontconfig），macOS 失败时回退到
+`system_profiler SPFontsDataType -json`，Windows 上通过 PowerShell 读 .NET 的
+`InstalledFontCollection`；随后把各字面合并成字体族、标记等宽字体，并缓存十分钟。
+`?refresh=1` 跳过缓存。
+
+这份目录是**建议来源，不是校验器**。浏览器与 Host 不是同一台机器时，列出的是 Host
+的字体而不是浏览器的；所以字段始终接受手动输入，未知族名会自然落到浏览器自己的
+回退链上。
 
 ## 为什么不能只用 CSS？
 

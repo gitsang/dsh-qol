@@ -38,7 +38,7 @@ window.__ModuleLoader__.load({
   factory: (require) => {
     const React = require('react')
     const primitives = require('@deepseek-ai/dsh-client-ui-primitives')
-    const { SegmentedControl, SettingsForm, SettingsValueField } = primitives
+    const { SegmentedControl, SettingsForm, SettingsValueField, Tag } = primitives
     const module = { exports: {} }
     const exports = module.exports
 
@@ -50,6 +50,7 @@ window.__ModuleLoader__.load({
     const BACKGROUND_VAR = '--dsh-terminal-color-background'
     const FOREGROUND_VAR = '--dsh-terminal-color-foreground'
     const REVISION_VAR = '--dsh-terminal-color-revision'
+    const FONT_LIST_ROUTE = '/sidebar-terminal-enhance/fonts'
     const PLUGIN_ID = '@gitsang/dsh-sidebar-terminal-enhance'
     const CSS_ID = `${PLUGIN_ID}/SidebarTerminalEnhance.css`
 
@@ -64,6 +65,19 @@ window.__ModuleLoader__.load({
       family: '字体族',
       familyPlaceholder: '例如 JetBrainsMono Nerd Font Mono',
       familyHint: '字体必须安装在浏览器所在的电脑上；族名不等于文件名。留空表示沿用 DSH 默认值。',
+      familyStackHint: '下拉列表来自宿主机；可输入逗号分隔的回退列表，例如 “JetBrainsMono Nerd Font Mono, monospace”。',
+      familyAria: '终端字体族',
+      catalogLoading: '正在读取宿主机字体…',
+      catalogReady: '宿主机共 {count} 个字体族，其中 {mono} 个等宽。',
+      catalogError: '无法读取宿主机字体：{error}',
+      catalogRetry: '重试',
+      catalogRefresh: '刷新列表',
+      catalogEmpty: '没有匹配的字体族',
+      catalogMore: '还有 {count} 个匹配项，继续输入以缩小范围。',
+      onlyMonospace: '仅等宽',
+      monoTag: '等宽',
+      optionUse: '使用字体 {family}',
+      pickerOpen: '展开宿主机字体列表',
       size: '字号',
       sizeHint: '8–32 px 之间的整数。留空表示沿用 DSH 默认值。',
       lineHeight: '行高',
@@ -92,6 +106,19 @@ window.__ModuleLoader__.load({
       family: 'Font family',
       familyPlaceholder: 'e.g. JetBrainsMono Nerd Font Mono',
       familyHint: 'The font must be installed on the machine running the browser; the family name is not the file name. Leave empty to keep the DSH default.',
+      familyStackHint: 'The list comes from the Host. You can also type a comma-separated fallback stack, e.g. “JetBrainsMono Nerd Font Mono, monospace”.',
+      familyAria: 'Terminal font family',
+      catalogLoading: 'Reading the Host’s fonts…',
+      catalogReady: 'The Host has {count} font families, {mono} of them monospaced.',
+      catalogError: 'Could not read the Host’s fonts: {error}',
+      catalogRetry: 'Retry',
+      catalogRefresh: 'Refresh list',
+      catalogEmpty: 'No matching font family',
+      catalogMore: '{count} more matches — keep typing to narrow the list.',
+      onlyMonospace: 'Monospace only',
+      monoTag: 'Mono',
+      optionUse: 'Use font {family}',
+      pickerOpen: 'Open the Host font list',
       size: 'Size',
       sizeHint: 'A whole number between 8 and 32 px. Leave empty to keep the DSH default.',
       lineHeight: 'Line height',
@@ -137,7 +164,185 @@ window.__ModuleLoader__.load({
       '.dshTerminalFont_hint{margin:0;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary)}',
       '.dshTerminalFont_preview{box-sizing:border-box;border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);overflow:auto;white-space:pre;padding:8px 12px;font-size:13px;line-height:1.5}',
       '.dshTerminalFont_error{margin:0;font-size:12px;line-height:1.5;color:var(--dsw-alias-state-error-primary)}',
+      '.dshTerminalFont_combo{position:relative;display:flex;flex-direction:column;gap:6px}',
+      '.dshTerminalFont_inputRow{display:flex;align-items:center;gap:6px}',
+      '.dshTerminalFont_combobox{box-sizing:border-box;flex:1 1 auto;min-width:0;height:30px;border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-sm,6px);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;padding:0 10px}',
+      '.dshTerminalFont_combobox::placeholder{color:var(--dsw-alias-label-tertiary)}',
+      '.dshTerminalFont_combobox:focus-visible{outline:2px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:1px}',
+      '.dshTerminalFont_toggle{box-sizing:border-box;flex:none;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-sm,6px);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);cursor:pointer;padding:0}',
+      '.dshTerminalFont_toggle:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
+      '.dshTerminalFont_toggle[aria-expanded="true"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
+      '.dshTerminalFont_toggle:focus-visible{outline:2px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:1px}',
+      '.dshTerminalFont_popover{position:absolute;z-index:30;left:0;right:0;top:calc(100% + 4px);box-sizing:border-box;max-height:280px;overflow-y:auto;border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-md,8px);background:var(--dsw-alias-bg-layer-2);padding:4px;box-shadow:var(--dsw-elevation-prominent,0 8px 24px rgba(0,0,0,.18))}',
+      '.dshTerminalFont_option{display:flex;align-items:center;justify-content:space-between;gap:12px;box-sizing:border-box;width:100%;margin:0;border:0;border-radius:var(--dsw-radius-sm,6px);background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:20px;text-align:left;padding:6px 8px;cursor:pointer}',
+      '.dshTerminalFont_option[data-active="true"]{background:var(--dsw-alias-interactive-bg-hover)}',
+      '.dshTerminalFont_option[aria-selected="true"]{font-weight:600}',
+      '.dshTerminalFont_optionName{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.dshTerminalFont_optionTag{flex:none;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
+      '.dshTerminalFont_catalogBar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}',
+      '.dshTerminalFont_catalogNote{margin:0;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary)}',
+      '.dshTerminalFont_catalogError{margin:0;font-size:12px;line-height:1.5;color:var(--dsw-alias-state-error-primary)}',
+      '.dshTerminalFont_linkButton{border:0;background:transparent;color:var(--dsw-alias-state-business-primary);font:inherit;font-size:12px;line-height:18px;padding:0;cursor:pointer}',
+      '.dshTerminalFont_linkButton:disabled{color:var(--dsw-alias-label-tertiary);cursor:default}',
+      '.dshTerminalFont_check{display:inline-flex;align-items:center;gap:6px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);cursor:pointer}',
     ].join('')
+
+    /**
+     * The Host font catalog fetched by the configuration page.
+     *
+     * `status` is `idle` before the first request, `loading` while the Host
+     * enumerates, `ready` once a list is available and `error` when the route
+     * failed. A failed catalog never blocks the field: the family stays free
+     * text, the list is only a suggestion source.
+     */
+    let fontCatalogState = Object.freeze({ status: 'idle', fonts: [], source: undefined, error: undefined, total: 0 })
+    let fontCatalogRequest
+    const fontCatalogListeners = new Set()
+
+    /** @param {{status:string,fonts:Array,source?:string,error?:string,total?:number}} next - catalog state. */
+    function setFontCatalog(next) {
+      fontCatalogState = Object.freeze({
+        status: next.status,
+        fonts: next.fonts ?? [],
+        source: next.source,
+        error: next.error,
+        total: next.total ?? next.fonts?.length ?? 0,
+      })
+      for (const listener of fontCatalogListeners) listener()
+    }
+
+    /** @param {() => void} listener - page subscription. @returns {() => void} unsubscribe. */
+    function subscribeFontCatalog(listener) {
+      fontCatalogListeners.add(listener)
+      return () => {
+        fontCatalogListeners.delete(listener)
+      }
+    }
+
+    /**
+     * Keep only usable catalog rows and de-duplicate by family name.
+     * @param {unknown} value - wire value from the Host route.
+     * @returns {Array<{family:string,monospace:boolean}>} normalized fonts.
+     */
+    function normalizeFontCatalog(value) {
+      if (!Array.isArray(value)) return []
+      const seen = new Set()
+      const fonts = []
+      for (const entry of value) {
+        const family = typeof entry?.family === 'string' ? entry.family.trim() : ''
+        if (family === '' || seen.has(family)) continue
+        seen.add(family)
+        fonts.push({ family, monospace: entry?.monospace === true })
+      }
+      return fonts
+    }
+
+    /**
+     * Read the Host font catalog once, or force a fresh enumeration.
+     * Concurrent callers share one request.
+     * @param {boolean} [force] - bypass the cached catalog and ask the Host to rescan.
+     * @returns {Promise<typeof fontCatalogState>} settled catalog state.
+     */
+    function loadHostFonts(force = false) {
+      if (!force && fontCatalogState.status === 'ready') return Promise.resolve(fontCatalogState)
+      if (fontCatalogRequest !== undefined) return fontCatalogRequest
+      setFontCatalog({ status: 'loading', fonts: fontCatalogState.fonts, source: fontCatalogState.source, total: fontCatalogState.total })
+      fontCatalogRequest = (async () => {
+        try {
+          if (typeof globalThis.fetch !== 'function') throw new Error('fetch unavailable')
+          const url = force ? `${FONT_LIST_ROUTE}?refresh=1` : FONT_LIST_ROUTE
+          const response = await globalThis.fetch(url, { cache: 'no-store', credentials: 'same-origin' })
+          if (response?.ok !== true) throw new Error(`HTTP ${response?.status ?? 'error'}`)
+          const body = await response.json()
+          if (body?.ok !== true) throw new Error(typeof body?.error === 'string' ? body.error : 'invalid font catalog')
+          const fonts = normalizeFontCatalog(body.fonts)
+          setFontCatalog({ status: 'ready', fonts, source: typeof body.source === 'string' ? body.source : undefined })
+        } catch (error) {
+          setFontCatalog({
+            status: 'error',
+            fonts: [],
+            error: error instanceof Error ? error.message : String(error),
+          })
+        } finally {
+          fontCatalogRequest = undefined
+        }
+        return fontCatalogState
+      })()
+      return fontCatalogRequest
+    }
+
+    /** The segment of a comma-separated stack the picker is currently editing. */
+    function fontQuery(value) {
+      const parts = String(value ?? '').split(',')
+      return parts[parts.length - 1].trim()
+    }
+
+    /** @param {string} needle - lowercase query. @param {string} haystack - lowercase family. @returns {boolean} subsequence match. */
+    function isSubsequence(needle, haystack) {
+      let cursor = 0
+      for (const character of haystack) {
+        if (character === needle[cursor]) cursor += 1
+        if (cursor === needle.length) return true
+      }
+      return needle.length === 0
+    }
+
+    /**
+     * Score one family against the typed query. Whole-token substring matches
+     * win over fuzzy subsequence matches, and a prefix beats a later hit.
+     * @param {string} family - candidate family.
+     * @param {string} query - raw lowercase query.
+     * @returns {number|undefined} score, or undefined when the family does not match.
+     */
+    function scoreFontFamily(family, query) {
+      const lower = family.toLowerCase()
+      const tokens = query.split(/\s+/u).filter((token) => token !== '')
+      if (tokens.length > 0 && tokens.every((token) => lower.includes(token))) {
+        const index = lower.indexOf(query.replace(/\s+/gu, ' '))
+        return 100 - (index < 0 ? 0 : Math.min(index, 40))
+      }
+      const compact = query.replace(/\s+/gu, '')
+      if (compact !== '' && isSubsequence(compact, lower)) return 40
+      return undefined
+    }
+
+    /**
+     * Rank the catalog for the picker.
+     * @param {Array<{family:string,monospace:boolean}>} fonts - catalog.
+     * @param {string} value - current family field value (only its last segment is searched).
+     * @param {boolean} onlyMonospace - filter to faces the Host reports as monospaced.
+     * @param {number} [limit] - maximum rows returned.
+     * @returns {{items:Array<{family:string,monospace:boolean}>, total:number}} matches and the untruncated count.
+     */
+    function rankFonts(fonts, value, onlyMonospace, limit = 60) {
+      const pool = onlyMonospace ? fonts.filter((font) => font.monospace) : fonts
+      const query = fontQuery(value).toLowerCase()
+      if (query === '') return { items: pool.slice(0, limit), total: pool.length }
+      const scored = []
+      for (const font of pool) {
+        const score = scoreFontFamily(font.family, query)
+        if (score !== undefined) scored.push({ font, score })
+      }
+      scored.sort((left, right) => right.score - left.score
+        || Number(right.font.monospace) - Number(left.font.monospace)
+        || left.font.family.localeCompare(right.font.family))
+      return { items: scored.slice(0, limit).map((entry) => entry.font), total: scored.length }
+    }
+
+    /**
+     * Replace the segment the picker is editing, keeping earlier fallbacks.
+     * @param {string} value - current family field value.
+     * @param {string} family - chosen family.
+     * @returns {string} the new family value.
+     */
+    function withSelectedFamily(value, family) {
+      const current = String(value ?? '').trim()
+      if (current === '' || current.endsWith(',')) return current === '' ? family : `${current} ${family}`
+      const parts = current.split(',').map((part) => part.trim())
+      if (parts.length <= 1) return family
+      parts[parts.length - 1] = family
+      return parts.join(', ')
+    }
 
     /** Install the plugin-owned stylesheet and return its removal callback. */
     function installStyles() {
@@ -699,6 +904,220 @@ window.__ModuleLoader__.load({
       }
     }
 
+    /**
+     * Font-family field: a free-text combobox over the Host's font catalog.
+     *
+     * Typing both edits the family and filters the list, so an arbitrary
+     * fallback stack stays possible while installed faces are one keystroke
+     * away. Arrow keys move through the suggestions, Enter picks one, Escape
+     * closes the list. Selecting replaces the last comma-separated segment and
+     * keeps earlier fallbacks intact.
+     * @param {object} props - field props.
+     * @returns {import('react').ReactElement} the field.
+     */
+    function FontFamilyPicker({ id, t, value, overridden, label, hint, overriddenLabel, resetLabel, disabled, onEdit, onReset }) {
+      const [catalog, setCatalog] = React.useState(fontCatalogState)
+      const [open, setOpen] = React.useState(false)
+      const [active, setActive] = React.useState(-1)
+      const [onlyMonospace, setOnlyMonospace] = React.useState(false)
+      const container = React.useRef(null)
+      React.useEffect(() => subscribeFontCatalog(() => setCatalog(fontCatalogState)), [])
+      React.useEffect(() => {
+        loadHostFonts()
+      }, [])
+
+      const matches = rankFonts(catalog.fonts, value, onlyMonospace)
+      const monoCount = catalog.fonts.filter((font) => font.monospace).length
+      const listId = `${id}-listbox`
+      const optionId = (index) => `${id}-option-${index}`
+
+      const openList = () => {
+        if (disabled) return
+        setOpen(true)
+        setActive(-1)
+        if (fontCatalogState.status === 'idle' || fontCatalogState.status === 'error') loadHostFonts()
+      }
+      const choose = (family) => {
+        onEdit(withSelectedFamily(value, family))
+        setOpen(false)
+        setActive(-1)
+      }
+      const onKeyDown = (event) => {
+        if (event.key === 'ArrowDown') {
+          event.preventDefault()
+          if (!open) openList()
+          setActive((previous) => Math.min(matches.items.length - 1, previous + 1))
+        } else if (event.key === 'ArrowUp') {
+          event.preventDefault()
+          if (!open) openList()
+          setActive((previous) => Math.max(0, previous - 1))
+        } else if (event.key === 'Enter') {
+          const chosen = open ? matches.items[active] : undefined
+          if (chosen !== undefined) {
+            event.preventDefault()
+            choose(chosen.family)
+          }
+        } else if (event.key === 'Escape') {
+          setOpen(false)
+          setActive(-1)
+        } else if (event.key === 'Tab') {
+          setOpen(false)
+        }
+      }
+      const onBlur = (event) => {
+        if (container.current?.contains?.(event.relatedTarget) === true) return
+        setOpen(false)
+        setActive(-1)
+      }
+
+      let catalogNote
+      if (catalog.status === 'loading') {
+        catalogNote = React.createElement('p', { className: 'dshTerminalFont_catalogNote' }, t('catalogLoading'))
+      } else if (catalog.status === 'error') {
+        catalogNote = React.createElement(
+          'p',
+          { className: 'dshTerminalFont_catalogError', role: 'status' },
+          t('catalogError', { error: catalog.error ?? '' }),
+          ' ',
+          React.createElement('button', {
+            type: 'button',
+            className: 'dshTerminalFont_linkButton',
+            onClick: () => loadHostFonts(true),
+          }, t('catalogRetry')),
+        )
+      } else if (catalog.status === 'ready') {
+        catalogNote = React.createElement(
+          'div',
+          { className: 'dshTerminalFont_catalogBar' },
+          React.createElement('p', { className: 'dshTerminalFont_catalogNote' }, t('catalogReady', { count: catalog.fonts.length, mono: monoCount })),
+          React.createElement(
+            'span',
+            { className: 'dshTerminalFont_catalogBar' },
+            React.createElement(
+              'label',
+              { className: 'dshTerminalFont_check' },
+              React.createElement('input', {
+                type: 'checkbox',
+                checked: onlyMonospace,
+                onChange: (event) => {
+                  setOnlyMonospace(event.target.checked)
+                  setActive(-1)
+                },
+              }),
+              t('onlyMonospace'),
+            ),
+            React.createElement('button', {
+              type: 'button',
+              className: 'dshTerminalFont_linkButton',
+              disabled: catalog.status === 'loading',
+              onClick: () => loadHostFonts(true),
+            }, t('catalogRefresh')),
+          ),
+        )
+      }
+
+      const popover = open && catalog.status !== 'loading' && (
+        matches.items.length === 0
+          ? React.createElement('div', { className: 'dshTerminalFont_popover' },
+              React.createElement('p', { className: 'dshTerminalFont_catalogNote' }, t('catalogEmpty')))
+          : React.createElement(
+              'div',
+              { className: 'dshTerminalFont_popover', role: 'listbox', id: listId, 'aria-label': label },
+              matches.items.map((font, index) => React.createElement(
+                'button',
+                {
+                  key: font.family,
+                  type: 'button',
+                  role: 'option',
+                  id: optionId(index),
+                  'aria-selected': index === active,
+                  'aria-label': t('optionUse', { family: font.family }),
+                  'data-active': index === active ? 'true' : 'false',
+                  className: 'dshTerminalFont_option',
+                  onClick: () => choose(font.family),
+                  onMouseEnter: () => setActive(index),
+                },
+                React.createElement('span', { className: 'dshTerminalFont_optionName' }, font.family),
+                font.monospace ? React.createElement('span', { className: 'dshTerminalFont_optionTag' }, t('monoTag')) : null,
+              )),
+              matches.total > matches.items.length
+                ? React.createElement('p', { className: 'dshTerminalFont_catalogNote', role: 'status' },
+                    t('catalogMore', { count: matches.total - matches.items.length }))
+                : null,
+            )
+      )
+
+      return React.createElement(
+        'div',
+        { className: 'dshTerminalFont_field', 'data-terminal-font-picker': true },
+        React.createElement(
+          'div',
+          { className: 'dshTerminalFont_catalogBar' },
+          React.createElement('label', { className: 'dshTerminalFont_label', htmlFor: id }, label),
+          overridden
+            ? React.createElement(
+                'span',
+                { className: 'dshTerminalFont_catalogBar' },
+                Tag === undefined ? null : React.createElement(Tag, { tone: 'neutral' }, overriddenLabel),
+                React.createElement('button', {
+                  type: 'button',
+                  className: 'dshTerminalFont_linkButton',
+                  disabled: disabled === true,
+                  onClick: onReset,
+                }, resetLabel),
+              )
+            : null,
+        ),
+        React.createElement(
+          'div',
+          { className: 'dshTerminalFont_combo', ref: container, onBlur },
+          React.createElement(
+            'div',
+            { className: 'dshTerminalFont_inputRow' },
+            React.createElement('input', {
+              id,
+              className: 'dshTerminalFont_combobox',
+              type: 'text',
+              role: 'combobox',
+              autoComplete: 'off',
+              spellCheck: false,
+              'aria-expanded': open,
+              'aria-controls': open ? listId : undefined,
+              'aria-activedescendant': open && active >= 0 ? optionId(active) : undefined,
+              'aria-label': t('familyAria'),
+              disabled: disabled === true,
+              value,
+              onChange: (event) => {
+                onEdit(event.target.value)
+                setOpen(true)
+                setActive(-1)
+              },
+              onFocus: openList,
+              onKeyDown,
+            }),
+            React.createElement('button', {
+              type: 'button',
+              className: 'dshTerminalFont_toggle',
+              'aria-label': t('pickerOpen'),
+              'aria-expanded': open,
+              disabled: disabled === true,
+              onClick: () => {
+                if (open) {
+                  setOpen(false)
+                  setActive(-1)
+                } else {
+                  openList()
+                }
+              },
+            }, '▾'),
+          ),
+          popover,
+        ),
+        catalogNote,
+        hint === undefined ? null : React.createElement('p', { className: 'dshTerminalFont_hint' }, hint),
+      )
+    }
+
     /** The complete staged value of the configuration page. */
     function pageDraft() {
       return { ...draftOf(currentSettings), preference: currentPreference }
@@ -781,18 +1200,16 @@ window.__ModuleLoader__.load({
           'section',
           { className: 'dshTerminalFont_section', 'data-sidebar-terminal-enhance-config': true },
           React.createElement('h3', { className: 'dshTerminalFont_heading' }, t('fontSection')),
-          React.createElement(SettingsValueField, {
+          React.createElement(FontFamilyPicker, {
             id: 'terminal-font-family',
+            t,
             label: t('family'),
-            hint: t('familyHint'),
-            text: draft.family,
+            hint: `${t('familyHint')} ${t('familyStackHint')}`,
+            value: draft.family,
             overridden: draft.family !== '',
             overriddenLabel: t('overridden'),
             resetLabel: t('reset'),
-            invalid: false,
-            invalidLabel: t('invalidSize'),
             disabled: false,
-            placeholder: t('familyPlaceholder'),
             onEdit: (value) => update('family', value),
             onReset: () => update('family', ''),
           }),
@@ -921,7 +1338,11 @@ window.__ModuleLoader__.load({
       getSettings: () => currentSettings,
       inspectFiberLane,
       isFitLike,
+      isSubsequence,
       isTerminalLike,
+      loadHostFonts,
+      normalizeFontCatalog,
+      rankFonts,
       normalizeFamily,
       normalizeLineHeight,
       normalizeDraft,
@@ -942,7 +1363,12 @@ window.__ModuleLoader__.load({
       setLineHeight,
       setSize,
       subscribe,
+      FontFamilyPicker,
       SidebarTerminalEnhanceConfig,
+      fontCatalogState: () => fontCatalogState,
+      fontQuery,
+      scoreFontFamily,
+      withSelectedFamily,
       CSS,
       COLOR_STORAGE_KEY,
       PREVIEW_GLYPHS,

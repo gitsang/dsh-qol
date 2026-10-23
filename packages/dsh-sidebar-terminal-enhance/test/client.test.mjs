@@ -42,6 +42,7 @@ const primitives = {
   SegmentedControl: () => null,
   SettingsForm: ({ children }) => children,
   SettingsValueField: () => null,
+  Tag: () => null,
 }
 
 const client = await loadClient()
@@ -55,7 +56,14 @@ const {
   getSettings,
   inspectFiberLane,
   isFitLike,
+  isSubsequence,
   isTerminalLike,
+  loadHostFonts,
+  normalizeFontCatalog,
+  rankFonts,
+  scoreFontFamily,
+  withSelectedFamily,
+  fontQuery,
   normalizeFamily,
   normalizeLineHeight,
   normalizePreference,
@@ -415,4 +423,91 @@ test('registers the component configuration page on the Plugins row', () => {
   assert.equal(registration[1].key, ROW_KEY)
   assert.equal(ROW_KEY, '@gitsang/dsh-qol#sidebar-terminal-enhance')
   assert.equal(registration[1].locale, 'sidebarTerminalEnhance')
+})
+
+test('the picker searches only the segment being edited', () => {
+  assert.equal(fontQuery('JetBrainsMono Nerd Font Mono'), 'JetBrainsMono Nerd Font Mono')
+  assert.equal(fontQuery('JetBrainsMono Nerd Font Mono, mon'), 'mon')
+  assert.equal(fontQuery('Arial,'), '')
+  assert.equal(fontQuery(undefined), '')
+})
+
+test('font matching prefers substrings, then fuzzy subsequences', () => {
+  assert.equal(scoreFontFamily('DejaVu Sans Mono', 'mono') !== undefined, true)
+  assert.equal(scoreFontFamily('DejaVu Sans Mono', 'dvs') !== undefined, true)
+  assert.equal(scoreFontFamily('DejaVu Sans Mono', 'zzz'), undefined)
+  assert.equal(scoreFontFamily('JetBrainsMono Nerd Font Mono', 'nerd mono') !== undefined, true)
+  assert.equal(isSubsequence('', 'anything'), true)
+  assert.equal(isSubsequence('abc', 'a1b2c3'), true)
+  assert.equal(isSubsequence('abc', 'acb'), false)
+})
+
+test('ranking puts exact hits first and can filter to monospace', () => {
+  const fonts = [
+    { family: 'Arial', monospace: false },
+    { family: 'DejaVu Sans Mono', monospace: true },
+    { family: 'Liberation Mono', monospace: true },
+    { family: 'Noto Sans Mono', monospace: true },
+  ]
+  const all = rankFonts(fonts, '', false)
+  assert.equal(all.total, 4)
+  assert.equal(all.items.length, 4)
+
+  const mono = rankFonts(fonts, '', true)
+  assert.deepEqual(mono.items.map((font) => font.family), ['DejaVu Sans Mono', 'Liberation Mono', 'Noto Sans Mono'])
+
+  const matched = rankFonts(fonts, 'liberation', false)
+  assert.deepEqual(matched.items.map((font) => font.family), ['Liberation Mono'])
+  assert.equal(matched.total, 1)
+
+  assert.equal(rankFonts(fonts, 'nothing-like-this', false).total, 0)
+})
+
+test('ranking truncates long lists but reports the full match count', () => {
+  const fonts = Array.from({ length: 120 }, (_, index) => ({ family: `Mono ${String(index).padStart(3, '0')}`, monospace: true }))
+  const ranked = rankFonts(fonts, 'mono', false, 20)
+  assert.equal(ranked.items.length, 20)
+  assert.equal(ranked.total, 120)
+})
+
+test('choosing a family replaces only the last stack segment', () => {
+  assert.equal(withSelectedFamily('', 'Mono'), 'Mono')
+  assert.equal(withSelectedFamily('Arial', 'Mono'), 'Mono')
+  assert.equal(withSelectedFamily('Arial, mon', 'Mono'), 'Arial, Mono')
+  assert.equal(withSelectedFamily('Arial, ', 'Mono'), 'Arial,  Mono'.replace('  ', ' '))
+  assert.equal(withSelectedFamily('Arial,B. Mono, x', 'Mono'), 'Arial, B. Mono, Mono')
+})
+
+test('the wire catalog is validated and de-duplicated', () => {
+  assert.deepEqual(normalizeFontCatalog([
+    { family: 'Mono', monospace: true },
+    { family: ' Mono ', monospace: false },
+    { family: '', monospace: true },
+    { family: 42 },
+    null,
+  ]), [{ family: 'Mono', monospace: true }])
+  assert.deepEqual(normalizeFontCatalog(null), [])
+})
+
+test('the catalog reader reports failures as state instead of throwing', async () => {
+  const saved = globalThis.fetch
+  globalThis.fetch = async () => ({ ok: false, status: 500 })
+  const failed = await client.__test.loadHostFonts(true)
+  assert.equal(failed.status, 'error')
+  assert.match(failed.error, /HTTP 500/u)
+
+  globalThis.fetch = async (url) => {
+    assert.equal(String(url), '/sidebar-terminal-enhance/fonts?refresh=1')
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, source: 'fc-list', fonts: [{ family: 'DejaVu Sans Mono', monospace: true }] }),
+    }
+  }
+  const ready = await client.__test.loadHostFonts(true)
+  assert.equal(ready.status, 'ready')
+  assert.equal(ready.source, 'fc-list')
+  assert.deepEqual(ready.fonts, [{ family: 'DejaVu Sans Mono', monospace: true }])
+
+  globalThis.fetch = saved
 })

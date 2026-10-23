@@ -16,7 +16,7 @@ groups:
 
 | Group | Field | Meaning |
 |---|---|---|
-| Font | Font family | Any installed CSS font-family list, e.g. `JetBrainsMono Nerd Font Mono` |
+| Font | Font family | Searchable combobox over the Host's installed families, or any typed CSS font-family list |
 | Font | Size | Integer 8–32 px |
 | Font | Line height | Multiplier 0.9–2, useful for icon-only glyph rows |
 | Palette | Mode | **Light**, **Dark**, or **Follow appearance** |
@@ -30,6 +30,39 @@ active DSH theme drive the terminal again.
 The page uses the same `SettingsForm`, field, switch and segmented-control
 primitives as the official plugin configuration pages. Edits stay staged until
 **Save**; leaving the page discards them.
+
+### The font list
+
+The font-family field reads a real catalog from the Host, so family names no
+longer have to be guessed:
+
+- typing filters the list — substring hits first, then fuzzy subsequence matches;
+- `↑` / `↓` move, `Enter` picks, `Esc` closes;
+- the button on the right opens the list on demand;
+- **Monospace only** keeps just the faces the Host reports as monospaced;
+- the chosen family replaces the last comma-separated segment, so a fallback
+  stack such as `JetBrainsMono Nerd Font Mono, Sarasa Term SC Nerd Font, monospace`
+  can still be assembled by hand;
+- **Refresh list** re-enumerates the Host.
+
+The Host half owns one same-origin route:
+
+```text
+GET /sidebar-terminal-enhance/fonts[?refresh=1]
+→ { ok: true, source: "fc-list", cached: false,
+    fonts: [{ family: "DejaVu Sans Mono", monospace: true }, …] }
+```
+
+It shells out with the platform's own tool — `fc-list` (fontconfig) on Linux and
+macOS when present, `system_profiler SPFontsDataType -json` as the macOS
+fallback, and the .NET `InstalledFontCollection` through PowerShell on Windows —
+merges faces into families, marks monospaced ones, and caches the result for ten
+minutes. `?refresh=1` bypasses the cache.
+
+The catalog is a **suggestion source, not a validator**. When the browser runs on
+a different machine than the Host, the listed families belong to the Host; the
+field therefore keeps accepting any typed value, and an unknown family simply
+falls through to the browser's own fallback chain.
 
 ## Why the terminal needs more than plain CSS
 
