@@ -89,3 +89,38 @@ test('sourceModelSelection reads the latest request header route', () => {
   assert.deepEqual(__test.sourceModelSelection(events), { provider: 'p', model: 'm', reasoningEffort: 'high' })
   assert.equal(__test.sourceModelSelection([]), undefined)
 })
+
+test('readFamily returns a Trajectory row index only for the requested Session', async () => {
+  const rootEvents = [
+    { seq: 1, type: 'turn/start', time: 1, data: { turn: 1 } },
+    { seq: 2, type: 'user/message', time: 2, data: { content: [{ type: 'text', text: 'root' }], source: { kind: 'user' } } },
+    { seq: 3, type: 'turn/end', time: 3, data: { turn: 1, reason: { kind: 'completed' } } },
+  ]
+  const childEvents = [
+    ...rootEvents,
+    { seq: 4, type: 'turn/start', time: 4, data: { turn: 2 } },
+    { seq: 5, type: 'user/message', time: 5, data: { content: [{ type: 'text', text: 'child' }], source: { kind: 'user' } } },
+  ]
+  const ctx = {
+    workspaceRegistry: { archivedSessionIds: [] },
+    sessionQuery: {
+      async listSessions() {
+        return [
+          { header: { id: 'root', createdAt: 1 } },
+          { header: { id: 'child', parentSession: 'root', createdAt: 2 } },
+        ]
+      },
+      async readSession(sessionId) {
+        return sessionId === 'root'
+          ? { session: { id: 'root' }, inheritedEventCount: 0, events: rootEvents }
+          : { session: { id: 'child' }, inheritedEventCount: 3, events: childEvents }
+      },
+    },
+  }
+  const family = await __test.readFamily(ctx, 'root')
+  const root = family.sessions.find((session) => session.sessionId === 'root')
+  const child = family.sessions.find((session) => session.sessionId === 'child')
+  assert.equal(root.eventIndex['user\u0000seq\u00002'].seq, 2)
+  assert.equal(child.eventIndex, undefined)
+  assert.equal(child.forkAtSeq, 2)
+})

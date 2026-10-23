@@ -1,7 +1,7 @@
 {
   "name": "@gitsang/dsh-session-tree",
   "version": "0.1.0",
-  "description": "A Tree View tab for DSH conversations: browse branch lineage, fork from any durable event, and edit a sent message to branch from before its Turn.",
+  "description": "Inline Session branch lineage in the DSH Trajectory ledger: fork from any durable event and edit a sent message to branch from before its Turn.",
   "license": "MIT",
   "type": "module",
   "main": "src/index.js",

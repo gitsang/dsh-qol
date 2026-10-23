@@ -1,0 +1,57 @@
+{
+  "name": "@gitsang/dsh-sidebar-terminal-enhance",
+  "version": "0.1.0",
+  "description": "Set the right Sidebar terminal’s font family, size and line height from the component’s Plugins configuration page.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./src/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gitsang/dsh-qol.git",
+    "directory": "packages/dsh-sidebar-terminal-enhance"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "terminal",
+    "terminal-font",
+    "nerd-font",
+    "font",
+    "xterm"
+  ],
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-plugin-manager"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4",
+    "react": "^18.2.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "homepage": "https://github.com/gitsang/dsh-qol/tree/main/packages/dsh-sidebar-terminal-enhance#readme",
+  "bugs": {
+    "url": "https://github.com/gitsang/dsh-qol/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

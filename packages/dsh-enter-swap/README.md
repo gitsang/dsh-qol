@@ -1,6 +1,6 @@
 # @gitsang/dsh-enter-swap
 
-把 dsh Web 输入框的两个回车快捷键**对调**，并且可以在 **设置 → 通用** 里随时切回来：
+把 dsh Web 输入框的两个回车快捷键**对调**，并且可以在 **插件 → @gitsang/dsh-qol → @gitsang/dsh-enter-swap** 的配置页里随时切回来：
 
 | 手势 | dsh 默认 | 插件默认（`Enter 换行`） |
 | --- | --- | --- |
@@ -9,7 +9,7 @@
 | `Shift+Enter` | 换行 | 换行（不变） |
 | `Ctrl/Cmd+Shift+Enter` | 加速发送 | 加速发送（不变，保留原语义） |
 
-设置页里的这一行可以切换两种模式，切换**立即生效**（无需刷新）：
+组件配置页可以切换两种模式；保存后**立即生效**（无需刷新）：
 
 - `Enter 换行 / Ctrl+Enter 发送` —— 对调（默认）
 - `dsh 默认：Enter 发送` —— 完全恢复上游行为
@@ -29,7 +29,7 @@
   （`input/editor/keymap.ts`）：Enter 走 submit 分支，Shift+Enter 落到 Lexical 自己的
   `INSERT_LINE_BREAK` 默认实现。快捷键系统只是把它们**展示**出来，并不驱动它们。
 
-所以「快捷键」页面里那两行永远只读；本插件改为在 **设置 → 通用** 提供一行普通设置，
+所以「快捷键」页面里那两行永远只读；本插件改为在组件自己的 **插件配置页** 提供选项，
 并在 DOM 边界上完成手势对调。要真正让「快捷键」页面可编辑，必须改 dsh 源码
 （放宽 `bindingIssue`，并把 composer 的 Enter 分发改成读取绑定），不是插件能做
 
@@ -73,7 +73,7 @@ dsh plugin --profile web add @gitsang/dsh-qol
 
 - 只对 Web 前端生效（`dsh web`）。桌面端有自己的原生键盘桥，键位由菜单驱动。
 - 「快捷键」设置页仍然显示 `Enter = 发送消息` / `Shift+Enter = 换行`，因为那是上游的
-  固定行，插件没有改它的展示。实际行为按上表交换，开关在 **设置 → 通用 → 回车键行为**。
+  固定行，插件没有改它的展示。实际行为按上表交换，开关在 **插件 → @gitsang/dsh-qol → @gitsang/dsh-enter-swap → 配置**。
 - 偏好存在浏览器 `localStorage`（`dsh.enterSwap.v1`），按浏览器+源隔离，不写 Host
   设置文件；多标签页之间会同步。
 - 卸载：从 `bundles` 里删掉包名并重启即可，没有服务端状态；浏览器里可能残留一个

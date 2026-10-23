@@ -1,9 +1,13 @@
 /**
  * dsh-experimental-auto-review-enhance
  *
- * Make the experimental `auto` permission preset (Auto review) selectable in
- * the shipped Settings > Permission "default for new sessions" row, without
- * hard-wiring Auto review as the only default.
+ * Make the experimental `auto` permission preset (Auto review) the default for
+ * genuinely new root sessions, and optionally choose the language of its
+ * user-visible denial reasons.
+ *
+ * All settings live on this component's own configuration page under
+ * Plugins → @gitsang/dsh-qol. Nothing is injected into the shipped Settings
+ * pages.
  *
  * Why a plugin is needed
  * ----------------------
@@ -13,27 +17,24 @@
  *   - `defaultSettings()` rejects any default that is not a configured table
  *     entry, and storing `defaultPreset: auto` in the profile patch makes the
  *     whole `permission` row fail to activate at boot;
- *   - the shipped Settings row renders exactly `catalog().defaultOptions`.
+ *   - `auto` only exists while the Auto review integration is live.
  *
  * So this plugin does three narrow things, all reversible:
  *
- *  1. It wraps `permissionPresets.catalog()` and appends an `auto` option to
- *     `defaultOptions` while the Auto review integration is live.
- *  2. It wraps the live `settings` service: `describe()` reports `auto` as the
- *     current default of the `permission` namespace when this plugin's own
- *     state says so, and `mutate()`/`update()` intercept a
- *     `defaultPreset: "auto"` write so it never reaches the permission schema.
- *     The real `permission.defaultPreset` keeps naming a normal preset, so the
- *     composition always boots.
- *  3. On `session/created` (prepended, so it runs before the permission
+ *  1. On `session/created` (prepended, so it runs before the permission
  *     service pins its own default) it switches genuinely fresh root sessions
- *     to `auto`.
+ *     to `auto`. It also wraps `pinInitialPermission` for determinism.
+ *  2. Exposes one same-origin config endpoint for the component page: the
+ *     Auto-review new-session default and the reviewer reason language.
+ *  3. Appends a language directive to the Auto review classifier's system
+ *     prompt when Chinese is requested. The JSON approval protocol itself
+ *     stays in English.
  *
- * The Auto/not-Auto choice lives in a small per-profile JSON file under
- * `$DSH_HOME/experimental-auto-review-enhance/<profile>.json`. That keeps this plugin
- * out of the permission Config entirely: no duplicate source of truth, no
- * unsupported enum value, and switching back to Read Only just deletes the
- * file and writes the normal preset through the official service.
+ * The Auto/not-Auto choice and the optional reviewer language live in a small
+ * per-profile JSON file under
+ * `$DSH_HOME/experimental-auto-review-enhance/<profile>.json`. The official
+ * `permission.defaultPreset` is never touched, so the composition always
+ * boots and there is no second source of truth.
  *
  * Scope rules
  * -----------
@@ -41,13 +42,13 @@
  *    `never` on purpose.
  *  - Restored / seeded sessions keep the preset they were last left in; only
  *    genuinely new sessions adopt the configured default.
- *  - When the Auto integration is not live, everything degrades to stock
- *    behavior: the option is not offered, the row falls back to the real
- *    configured default, and new sessions keep the stock default.
+ *  - When the Auto integration is not live, the page disables the Auto default
+ *    control and new sessions keep the stock permission default. A stored Auto
+ *    choice is remembered for when the integration returns.
  *
- * Only public service methods plus the same instance-level wrapping pattern the
- * shipped settings code itself relies on are used. Every failure is logged and
- * swallowed: this plugin must never be able to veto a session or a boot.
+ * Only public service methods plus the existing instance-level wrapping pattern
+ * are used. Every failure is logged and swallowed: this plugin must never be
+ * able to veto a session or a boot.
  *
  * @module @gitsang/dsh-experimental-auto-review-enhance
  */
@@ -57,20 +58,23 @@ import { dirname, join } from 'node:path';
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'experimental-auto-review-enhance';
 
-/** The permission preset service must exist before anything can be offered. */
-export const inject = ['permissionPresets'];
+/** The permission preset and LLM services must exist before anything can be offered. */
+export const inject = ['permissionPresets', 'llm'];
+
+/** Same-origin endpoint owned by this package for its component configuration. */
+export const CONFIG_PATH = '/experimental-auto-review-enhance/config';
 
 /** Canonical identity of the experimental per-call review preset. */
 const AUTO_PRESET = 'auto';
 
-/** Option appended to the Settings dropdown while Auto review is live. */
-const AUTO_OPTION = {
-  value: AUTO_PRESET,
-  name: 'Auto review',
-  description:
-    'Run without a sandbox after an experimental same-model review of every tool call. '
-    + 'Denied calls ask you for approval.',
-};
+/** Prefix that uniquely identifies the shipped Auto review system prompt. */
+const AUTO_REVIEW_POLICY_PREFIX = 'REVIEW_POLICY\n';
+
+/** Appended to the reviewer prompt when user-facing reasons should be Chinese. */
+const ZH_REASON_INSTRUCTION = `
+
+USER_VISIBLE_LANGUAGE
+When the JSON object includes a "reason" member, write that reason in Simplified Chinese (简体中文). The reason is shown directly to the user in an approval prompt or a denied tool card. Keep every JSON member name, risk value and decision value exactly as specified above; do not translate the protocol, and do not add any member the protocol does not allow.`;
 
 /** Marks a service instance this plugin already wrapped. */
 const WRAPPED = Symbol.for('dsh-experimental-auto-review-enhance/wrapped');
@@ -87,6 +91,28 @@ function log(ctx, level, message) {
   } catch {
     /* a logger failure is never a reason to fail a session */
   }
+}
+
+/** Whether one LLM request is the shipped Auto review classification call. */
+function isAutoReviewRequest(options) {
+  return typeof options?.system === 'string' && options.system.startsWith(AUTO_REVIEW_POLICY_PREFIX);
+}
+
+/**
+ * Append the user-visible language instruction to an Auto review request.
+ * Every other LLM request is returned untouched.
+ *
+ * @param options - the caller's generate options.
+ * @param language - the configured reviewer reason language.
+ * @returns the original options or a shallow copy with the language directive.
+ */
+function withReviewLanguage(options, language) {
+  if (language !== 'zh' || !isAutoReviewRequest(options)) return options;
+  const marker = '\n\nFor any allow, end with exactly';
+  const system = options.system.includes(marker)
+    ? options.system.replace(marker, `${ZH_REASON_INSTRUCTION}${marker}`)
+    : `${options.system}${ZH_REASON_INSTRUCTION}`;
+  return { ...options, system };
 }
 
 /** Current state directory; a renamed package must not silently drop a saved choice. */
@@ -123,36 +149,48 @@ function legacyStatePathsOf(ctx) {
     : LEGACY_STATE_DIRS.map((directory) => join(resolved.home, directory, `${resolved.profile}.json`));
 }
 
-/** Read the stored choice; any unreadable state means "not Auto". */
-function readState(ctx) {
+/** Read the complete stored state; any unreadable state is an empty record. */
+function readStateRecord(ctx) {
   try {
     const current = statePathOf(ctx);
     const path = current !== null && existsSync(current)
       ? current
       : legacyStatePathsOf(ctx).find((candidate) => existsSync(candidate));
-    if (path === undefined) return false;
+    if (path === undefined) return {};
     const parsed = JSON.parse(readFileSync(path, 'utf8'));
-    return parsed?.defaultPreset === AUTO_PRESET;
+    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
   } catch (error) {
     log(ctx, 'warn', `could not read the saved choice (${describeError(error)}); keeping the configured default`);
-    return false;
+    return {};
   }
 }
 
-/** Persist (or clear) the Auto choice atomically; failures are logged only. */
-function writeState(ctx, auto) {
+/** Whether the stored choice is Auto. */
+function readState(ctx) {
+  return readStateRecord(ctx).defaultPreset === AUTO_PRESET;
+}
+
+/** The configured reviewer language; English is the safe default. */
+function readReviewLanguage(ctx) {
+  return readStateRecord(ctx).reviewLanguage === 'zh' ? 'zh' : 'en';
+}
+
+/** Persist one state record atomically; failures are logged only. */
+function writeStateRecord(ctx, record) {
   try {
     const path = statePathOf(ctx);
     if (path === null) {
-      log(ctx, 'warn', 'no profile state path is available; the Auto default was not saved');
-      return;
+      log(ctx, 'warn', 'no profile state path is available; the choice was not saved');
+      return false;
     }
     mkdirSync(dirname(path), { recursive: true });
     const temporary = `${path}.${process.pid}.tmp`;
-    writeFileSync(temporary, `${JSON.stringify({ defaultPreset: auto ? AUTO_PRESET : '' }, null, 2)}\n`, 'utf8');
+    writeFileSync(temporary, `${JSON.stringify(record, null, 2)}\n`, 'utf8');
     renameSync(temporary, path);
+    return true;
   } catch (error) {
     log(ctx, 'warn', `could not save the choice (${describeError(error)})`);
+    return false;
   }
 }
 
@@ -163,47 +201,6 @@ function autoAvailable(presets) {
   } catch {
     return false;
   }
-}
-
-/** Compare one settings path with the single field this plugin intercepts. */
-function isDefaultPresetPath(path) {
-  return Array.isArray(path) && path.length === 1 && path[0] === 'defaultPreset';
-}
-
-/**
- * Replace the current-session count of one catalog answer with the Settings
- * answer: append `auto` to the presets eligible as a future-session default.
- *
- * @param catalog - the permission service's own catalog snapshot.
- * @param auto - whether the stored choice is Auto.
- * @param live - whether the Auto integration is currently registered.
- * @returns the catalog the Settings row reads.
- */
-function withAutoDefault(catalog, auto, live) {
-  const defaultOptions = Array.isArray(catalog?.defaultOptions) ? catalog.defaultOptions : [];
-  if (!live) return catalog;
-  const already = defaultOptions.some((option) => option?.value === AUTO_PRESET);
-  return {
-    ...catalog,
-    defaultOptions: already ? defaultOptions : [...defaultOptions, { ...AUTO_OPTION }],
-    defaultPreset: auto ? AUTO_PRESET : catalog?.defaultPreset,
-  };
-}
-
-/**
- * Decorate one `settings.describe()` permission descriptor so the shipped row
- * shows (and keeps) the Auto choice it cannot represent by itself.
- *
- * @param descriptor - one settings descriptor.
- * @param auto - whether the stored choice is Auto.
- * @param live - whether the Auto integration is currently registered.
- * @returns the descriptor, possibly with `value.defaultPreset` rewritten.
- */
-function withAutoDescriptor(descriptor, auto, live) {
-  if (!auto || !live) return descriptor;
-  const value = descriptor?.value;
-  if (value === null || typeof value !== 'object') return descriptor;
-  return { ...descriptor, value: { ...value, defaultPreset: AUTO_PRESET } };
 }
 
 /** Whether this session is a delegated subagent child rather than a root. */
@@ -228,7 +225,48 @@ function isFreshPermissionState(state) {
     && state.seeded !== true;
 }
 
-/** Install the catalog/settings view plus the new-session default. */
+/** Read one JSON object request body. */
+async function readJson(request) {
+  const decoder = new TextDecoder();
+  let text = '';
+  for await (const chunk of request) text += typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true });
+  text += decoder.decode();
+  let value;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw new TypeError('request body must be valid JSON');
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError('request body must be a JSON object');
+  }
+  return value;
+}
+
+/** Write one JSON response. */
+function respondJson(response, status, value) {
+  response.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+  });
+  response.end(JSON.stringify(value));
+}
+
+/**
+ * The complete configuration the component page edits.
+ * @param ctx - owning plugin context, used to locate the state file.
+ * @param presets - live permission preset service.
+ * @returns the stored choice plus whether the Auto integration is available.
+ */
+function configSnapshot(ctx, presets) {
+  return {
+    defaultPreset: readState(ctx) ? AUTO_PRESET : '',
+    reviewLanguage: readReviewLanguage(ctx),
+    autoAvailable: autoAvailable(presets),
+  };
+}
+
+/** Install the component configuration endpoint plus the new-session default. */
 export function apply(ctx) {
   const presets = ctx.permissionPresets;
   if (presets === undefined || presets === null) {
@@ -236,7 +274,7 @@ export function apply(ctx) {
     return;
   }
 
-  const settings = typeof ctx.get === 'function' ? ctx.get('settings') : undefined;
+  const llm = ctx.llm ?? (typeof ctx.get === 'function' ? ctx.get('llm') : undefined);
 
   /** Replace one method on a live service instance, returning its disposer. */
   const patchMethod = (target, method, factory) => {
@@ -262,85 +300,76 @@ export function apply(ctx) {
     };
   };
 
-  // 1) Advertise Auto review as a future-session default while it is live.
-  const catalogDisposer = patchMethod(presets, 'catalog', (original) => function catalog(...args) {
-    const result = original.apply(this === undefined ? presets : this, args);
+  // 0) Let the configured language steer the user-visible reviewer reason.
+  //
+  // Auto review owns its fixed policy and does not expose the classification
+  // request. The one public seam it uses is `ctx.llm.stream`, so wrap that
+  // method and recognize the shipped policy by its unique banner. Only the
+  // free-form `reason` instruction changes; the JSON protocol stays intact.
+  const llmDisposer = patchMethod(llm, 'stream', (original) => function stream(options) {
+    let adjusted = options;
     try {
-      return withAutoDefault(result, readState(ctx), autoAvailable(presets));
+      adjusted = withReviewLanguage(options, readReviewLanguage(ctx));
     } catch (error) {
-      log(ctx, 'warn', `could not decorate the preset catalog (${describeError(error)})`);
-      return result;
+      log(ctx, 'warn', `could not apply the reviewer language (${describeError(error)})`);
     }
+    return original.apply(this === undefined ? llm : this, [adjusted]);
   });
-
-  // 2) Let the shipped Settings row read and write that choice.
-  const settingsDisposers = [];
-  if (settings !== undefined && settings !== null) {
-    settingsDisposers.push(patchMethod(settings, 'describe', (original) => function describe(...args) {
-      const rows = original.apply(this === undefined ? settings : this, args);
-      try {
-        if (!Array.isArray(rows)) return rows;
-        const auto = readState(ctx);
-        const live = autoAvailable(presets);
-        return rows.map((row) => (row?.ns === 'permission' ? withAutoDescriptor(row, auto, live) : row));
-      } catch (error) {
-        log(ctx, 'warn', `could not decorate the settings descriptor (${describeError(error)})`);
-        return rows;
-      }
-    }));
-
-    /**
-     * Recognize one `defaultPreset` write in either supported shape: the
-     * path-addressed `mutate` ops array, or the merge-style `update` object.
-     *
-     * @param ns - settings namespace the write addresses.
-     * @param input - ops array (`mutate`) or field patch (`update`).
-     * @returns `auto`, `other`, or `null` when the write does not touch the field.
-     */
-    const defaultPresetWrite = (ns, input) => {
-      if (ns !== 'permission') return null;
-      if (Array.isArray(input)) {
-        let touched = null;
-        for (const op of input) {
-          if (op === null || typeof op !== 'object') continue;
-          if (!isDefaultPresetPath(op.path)) continue;
-          if (op.op === 'set') touched = op.value === AUTO_PRESET ? AUTO_PRESET : 'other';
-          else touched = 'other';
-        }
-        return touched;
-      }
-      if (input !== null && typeof input === 'object' && Object.hasOwn(input, 'defaultPreset')) {
-        return input.defaultPreset === AUTO_PRESET ? AUTO_PRESET : 'other';
-      }
-      return null;
-    };
-
-    const intercept = (original) => async function writeDefaultPreset(ns, input, expectedRevision) {
-      let touched;
-      try {
-        touched = defaultPresetWrite(ns, input);
-      } catch (error) {
-        log(ctx, 'warn', `could not inspect the settings write (${describeError(error)})`);
-        return original.apply(this === undefined ? settings : this, [ns, input, expectedRevision]);
-      }
-      if (touched === AUTO_PRESET) {
-        // Never let this reach the permission schema: `auto` is not a table
-        // entry and would make the whole row fail to activate at next boot.
-        writeState(ctx, true);
-        return undefined;
-      }
-      const result = await original.apply(this === undefined ? settings : this, [ns, input, expectedRevision]);
-      if (touched === 'other') writeState(ctx, false);
-      return result;
-    };
-
-    settingsDisposers.push(patchMethod(settings, 'mutate', intercept));
-    settingsDisposers.push(patchMethod(settings, 'update', intercept));
-  } else {
-    log(ctx, 'warn', 'the settings service is absent; Auto review will not be selectable in Settings');
+  if (llm === undefined || llm === null) {
+    log(ctx, 'warn', 'the llm service is absent; the reviewer language option has no effect');
   }
 
-  // 3) New root sessions start in Auto review while that is the saved default.
+  // The component's choices are its own state, not permission Config fields.
+  // A row nested inside the QOL bundle has no Settings namespace of its own, so
+  // its Configure page talks to this same-origin endpoint instead.
+  const registerConfigRoute = (webCtx) => {
+    webCtx.effect(() => webCtx.webServer.register({
+      kind: 'exact',
+      path: CONFIG_PATH,
+      handler: async (request, response) => {
+        try {
+          if (request.method === 'GET') {
+            respondJson(response, 200, configSnapshot(ctx, presets));
+            return;
+          }
+          if (request.method === 'POST') {
+            const body = await readJson(request);
+            const record = readStateRecord(ctx);
+            if (Object.hasOwn(body, 'defaultPreset')) {
+              if (body.defaultPreset !== '' && body.defaultPreset !== AUTO_PRESET) {
+                throw new TypeError('defaultPreset must be "auto" or an empty string');
+              }
+              if (body.defaultPreset === AUTO_PRESET && !autoAvailable(presets)) {
+                throw new TypeError('Auto review is not available');
+              }
+              record.defaultPreset = body.defaultPreset;
+            }
+            if (Object.hasOwn(body, 'reviewLanguage')) {
+              if (body.reviewLanguage !== 'en' && body.reviewLanguage !== 'zh') {
+                throw new TypeError('reviewLanguage must be "en" or "zh"');
+              }
+              record.reviewLanguage = body.reviewLanguage;
+            }
+            if (!writeStateRecord(ctx, record)) throw new Error('could not save the component configuration');
+            respondJson(response, 200, configSnapshot(ctx, presets));
+            return;
+          }
+          response.writeHead(405);
+          response.end();
+        } catch (error) {
+          const status = error instanceof TypeError ? 400 : 500;
+          respondJson(response, status, { error: describeError(error) });
+        }
+      },
+    }), 'experimental-auto-review-enhance: configuration route');
+  };
+  if (typeof ctx.inject === 'function') {
+    ctx.inject(['webServer'], registerConfigRoute);
+  } else if (ctx.webServer !== undefined) {
+    registerConfigRoute(ctx);
+  }
+
+  // 1) New root sessions start in Auto review while that is the saved default.
   //
   // Two paths, one intent. `pinInitialPermission` is the single place that
   // decides a session's initial preset, so wrapping it works no matter how the
@@ -377,7 +406,7 @@ export function apply(ctx) {
     adopt(session, fresh);
     return result;
   });
-  settingsDisposers.push(pinDisposer);
+  const integrationDisposers = [pinDisposer];
 
   ctx.on('session/created', (session) => {
     let fresh = false;
@@ -396,22 +425,14 @@ export function apply(ctx) {
     } catch {
       /* marker only */
     }
-    // The catalog answer changed the moment the option became available, so
-    // tell already-open Settings surfaces to re-read it instead of waiting for
-    // the next mount.
-    try {
-      presets.emitCatalogChanged?.();
-    } catch (error) {
-      log(ctx, 'warn', `could not publish the catalog change (${describeError(error)})`);
-    }
     return () => {
-      catalogDisposer();
-      for (const dispose of settingsDisposers) dispose();
+      llmDisposer();
+      for (const dispose of integrationDisposers) dispose();
       try {
         Reflect.deleteProperty(presets, WRAPPED);
       } catch {
         /* marker only */
       }
     };
-  }, 'experimental-auto-review-enhance: Settings integration');
+  }, 'experimental-auto-review-enhance: configuration and session integration');
 }

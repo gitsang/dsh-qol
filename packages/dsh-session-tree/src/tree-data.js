@@ -119,6 +119,79 @@ export function describeEvent(event, cursor) {
 }
 
 /**
+ * Resolve the row identity the Trajectory table assigns to one durable event.
+ *
+ * Trajectory records do not all expose the same identity: user/context rows use
+ * their event seq, assistant rows use turn+step, and tool rows use the call id.
+ * Returning null means the event does not own a visible Trajectory row.
+ *
+ * @param {object} event - raw durable Session event.
+ * @param {{turn: number|null, step: number|null}} cursor - surrounding boundaries.
+ * @returns {string|null} stable Trajectory row key, or null.
+ */
+export function trajectoryEventKey(event, cursor = {}) {
+  if (event === null || typeof event !== 'object' || !Number.isSafeInteger(event.seq)) return null
+  switch (event.type) {
+    case 'user/message': {
+      const role = event.data?.source?.kind === 'user' ? 'user' : 'context'
+      return `${role}\u0000seq\u0000${event.seq}`
+    }
+    case 'assistant/message': {
+      const turn = typeof event.data?.turn === 'number' ? event.data.turn : cursor.turn
+      const step = typeof event.data?.step === 'number' ? event.data.step : cursor.step
+      return typeof turn === 'number' && typeof step === 'number'
+        ? `assistant\u0000${turn}\u0000${step}`
+        : null
+    }
+    case 'tool/call':
+    case 'tool/result': {
+      const callId = event.data?.callId
+      return typeof callId === 'string' && callId.length > 0 ? `tool\u0000call\u0000${callId}` : null
+    }
+    default:
+      return null
+  }
+}
+
+/**
+ * Index every visible Trajectory row in a complete Session log.
+ *
+ * Forked Sessions keep their inherited prefix in the log, so this index is
+ * deliberately built from the complete log rather than only the child-owned
+ * suffix. The browser uses the seq to place an inherited event on its owning
+ * branch lane.
+ *
+ * @param {readonly object[]} events - complete raw Session log.
+ * @returns {Record<string, {seq: number, type: string, turn: number|null, step: number|null}>}
+ */
+export function buildTrajectoryEventIndex(events) {
+  const index = {}
+  let turn = null
+  let step = null
+  for (const event of Array.isArray(events) ? events : []) {
+    if (event === null || typeof event !== 'object') continue
+    if (event.type === 'turn/start') {
+      turn = typeof event.data?.turn === 'number' ? event.data.turn : turn
+      step = null
+    } else if (event.type === 'step/start') {
+      step = typeof event.data?.step === 'number' ? event.data.step : step
+    } else if (event.type === 'turn/end') {
+      turn = typeof event.data?.turn === 'number' ? event.data.turn : turn
+      step = null
+    }
+    const key = trajectoryEventKey(event, { turn, step })
+    if (key === null || index[key] !== undefined) continue
+    index[key] = {
+      seq: event.seq,
+      type: event.type,
+      turn,
+      step,
+    }
+  }
+  return index
+}
+
+/**
  * Project the child-owned suffix of one Session log.
  *
  * A fork materializes its inherited prefix in the child log. Those inherited

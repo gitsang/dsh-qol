@@ -11,6 +11,7 @@
 
 import {
   assembleFamily,
+  buildTrajectoryEventIndex,
   editForkBoundary,
   extractOwnEvents,
   forkAfterBoundary,
@@ -82,6 +83,7 @@ async function readFamily(ctx, requestedId) {
       lastSeq: -1,
       ownTurns: 0,
       events: [],
+      eventIndex: {},
     }
     try {
       const snapshot = await ctx.sessionQuery.readSession(id)
@@ -96,6 +98,7 @@ async function readFamily(ctx, requestedId) {
         lastSeq: projected.lastSeq,
         ownTurns: projected.ownTurns,
         events: projected.events,
+        ...(id === requestedId ? { eventIndex: buildTrajectoryEventIndex(snapshot.events) } : {}),
       }
     } catch (error) {
       return { ...fallback, error: errorText(error) }

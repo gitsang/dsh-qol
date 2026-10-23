@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   assembleFamily,
+  buildTrajectoryEventIndex,
   describeEvent,
   editForkBoundary,
   extractOwnEvents,
@@ -115,4 +116,28 @@ test('assembleFamily tolerates a missing requested session', () => {
   const family = assembleFamily([], 'missing')
   assert.equal(family.rootId, 'missing')
   assert.deepEqual(family.ids, [])
+})
+
+
+test('buildTrajectoryEventIndex maps every visible Trajectory row identity back to its seq', () => {
+  const events = [
+    ...log().slice(0, 5),
+    {
+      seq: 5,
+      type: 'tool/call',
+      time: 5,
+      data: { turn: 1, step: 1, callId: 'call-a', name: 'bash', arguments: '{}' },
+    },
+    {
+      seq: 6,
+      type: 'tool/result',
+      time: 6,
+      data: { turn: 1, step: 1, callId: 'call-a', message: { content: [] } },
+    },
+  ]
+  const index = buildTrajectoryEventIndex(events)
+  assert.equal(index['user\u0000seq\u00003']?.seq, 3)
+  assert.equal(index['assistant\u00001\u00001']?.seq, 4)
+  assert.equal(index['tool\u0000call\u0000call-a']?.seq, 5)
+  assert.equal(index['session/end-seed']?.seq, undefined)
 })

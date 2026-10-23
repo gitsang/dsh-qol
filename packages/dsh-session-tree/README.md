@@ -1,11 +1,11 @@
 # @gitsang/dsh-session-tree
 
-A DSH Web component that adds **Tree View** to the conversation header and lets you branch a Session from any durable event.
+A DSH Web component that draws Session branch lineage directly inside the native **Trajectory** ledger and lets you branch a Session from any durable event.
 
 ## What it does
 
-- **Tree View tab** — appears beside Chat and Trajectory in the conversation header.
-- **Branch lineage** — draws the connected Session family (root, forks, and their descendants) and highlights the path to the Session you are viewing.
+- **Inline branch graph** — Trajectory event icons become graph nodes, connected by branch-colored lines.
+- **Fork indentation** — the first row of a descendant Session is indented one lane and anchored after the parent event it forked from.
 - **Fork from any event** — every visible event row has a `Fork after` action; the inspector also accepts an exact event sequence.
 - **Edit a sent message** — the pencil sits beside the Host's own Copy button on every user message. The Host forks from the event immediately before that Turn, then sends the edited prompt into the new Session.
 - **No Chat renderer replacement** — the component adds two sibling buttons to the native action row and leaves Copy and every other host control intact.
@@ -33,23 +33,17 @@ Restart the profile after installing; refresh the browser after UI-only changes.
 
 ## Use
 
-1. Open a conversation.
-2. Click **Tree View** in the header.
-3. Pick a branch on the left. The right pane lists that branch's own events (the inherited fork prefix is not repeated).
-4. To fork:
-   - press `Fork after` on an event, or
-   - type an exact event sequence under the timeline, or
-   - press `Fork at latest event`.
-5. To edit a past message: use the pencil beside the native Copy button on a user message. Saving forks the conversation from before that Turn and sends the edited text.
+1. Open a conversation and switch to **Trajectory**.
+2. Event icons are joined into a graph; descendant branches appear as indented lanes after their fork point.
+3. To edit a past message: use the pencil beside the native Copy button on a user message. Saving forks the conversation from before that Turn and sends the edited text.
+4. To fork from the latest event of the current branch, use the branch action on a user message.
 
 ## Semantics
 
 | Action | Fork boundary | Then |
 | --- | --- | --- |
-| `Fork after` event | that exact event (inclusive) | new Session opens, no prompt |
-| exact sequence | that exact event (inclusive) | new Session opens, no prompt |
+| branch action on a user message | that user message's exact event (inclusive) | new Session opens, no prompt |
 | edit user message | event immediately before the Turn's `turn/start` | forks, restores the source route, sends the edited text |
-| latest event | last durable event | new Session opens, no prompt |
 
 The component also cancels the source Session's active Turn before branching by default, so an answer you are replacing stops spending tokens.
 
@@ -58,6 +52,7 @@ The component also cancels the source Session's active Turn before branching by 
 - Editing preserves **text** only. Images and files attached to the original user message are not re-uploaded into the new branch.
 - Conversation branching does not roll back workspace files, commands, Git state, processes, or other tool side effects.
 - The tree route reads complete Session logs; very large families are capped at 100 Sessions in one response.
+- Descendant branch rows are inserted only when their fork anchor is in the currently rendered virtual window.
 - `dsh` is pre-release software. This package targets the public Session Controller, Session Query, and Workspace services exposed by DSH `0.2.x`.
 
 ## Development

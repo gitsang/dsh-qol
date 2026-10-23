@@ -11,8 +11,7 @@
  * actually live in the composer's Lexical keymap, not in the shortcut registry.
  *
  * So this plugin swaps the gestures at the DOM boundary and exposes the choice
- * as an ordinary General-settings row, which is the part dsh does let a plugin
- * own:
+ * on its own configuration page under Plugins → @gitsang/dsh-qol:
  *
  *   mode "swap" (default)  Enter -> newline, Ctrl/Cmd+Enter -> send
  *   mode "default"         every gesture behaves exactly as upstream
@@ -53,15 +52,19 @@ window.__ModuleLoader__.load({
       title: '回车键行为',
       description:
         '默认对调：Enter 换行、Ctrl/Cmd+Enter 发送（Shift+Enter 依然换行）。选择“dsh 默认”则恢复 Enter 发送、Shift+Enter 换行。',
+      summary: '选择输入框的回车键行为',
       swap: 'Enter 换行 / Ctrl+Enter 发送',
       default: 'dsh 默认：Enter 发送',
+      save: '保存',
     }
     const en = {
       title: 'Enter key behavior',
       description:
         'Swapped by default: Enter inserts a newline and Ctrl/Cmd+Enter sends (Shift+Enter still breaks the line). Choose “dsh default” to restore Enter-to-send.',
+      summary: 'Choose the composer Enter-key behavior',
       swap: 'Enter newline / Ctrl+Enter sends',
       default: 'dsh default: Enter sends',
+      save: 'Save',
     }
 
     /** The composer's contenteditable root; Lexical binds `keydown` here. */
@@ -71,15 +74,18 @@ window.__ModuleLoader__.load({
     /** Mirrors the primitives' `modalSelector`: dialogs and menus own Enter. */
     const MODAL = '[role="dialog"][aria-modal="true"], [role="menu"]'
 
-    const CSS_ID = '@gitsang/dsh-enter-swap/EnterSwapRow.css'
+    const CSS_ID = '@gitsang/dsh-enter-swap/EnterSwapConfig.css'
     const CSS = [
-      '.dshEnterSwapRow{border-bottom:.5px solid var(--dsw-alias-border-l2);align-items:center;gap:8px;padding:16px 0;display:flex}',
-      '.dshEnterSwapText{flex-direction:column;flex:1;gap:4px;min-width:0;padding-right:48px;display:flex}',
-      '.dshEnterSwapTitle{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:400;line-height:22px}',
-      '.dshEnterSwapDesc{color:var(--dsw-alias-label-tertiary);font-size:12px;font-weight:400;line-height:18px}',
-      '.dshEnterSwapSelect{border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-module-platform);height:36px;font:inherit;color:var(--dsw-alias-label-primary);cursor:pointer;border:none;padding:0 12px;font-size:14px;line-height:22px;max-width:320px}',
+      '.dshEnterSwapPage{display:grid;gap:10px;max-width:520px}',
+      '.dshEnterSwapField{display:grid;gap:4px}',
+      '.dshEnterSwapTitle{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:500;line-height:22px}',
+      '.dshEnterSwapDesc{color:var(--dsw-alias-label-tertiary);font-size:12px;font-weight:400;line-height:18px;margin:0}',
+      '.dshEnterSwapSelect{box-sizing:border-box;border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-module-platform);height:36px;font:inherit;color:var(--dsw-alias-label-primary);cursor:pointer;border:.5px solid var(--dsw-alias-border-l3);padding:0 10px;font-size:14px;line-height:22px;width:100%;max-width:320px}',
       '.dshEnterSwapSelect:hover{background:var(--dsw-alias-interactive-bg-hover)}',
       '.dshEnterSwapSelect:focus-visible{outline:1px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:2px}',
+      '.dshEnterSwapActions{display:flex;justify-content:flex-end}',
+      '.dshEnterSwapSave{min-height:32px;padding:0 14px;border:none;border-radius:var(--dsw-radius-md);background:var(--dsw-alias-button-primary-fill);color:var(--dsw-alias-label-primary-foreground);font:inherit;cursor:pointer}',
+      '.dshEnterSwapSave:disabled{background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-tertiary);cursor:default}',
     ].join('')
     if (
       typeof document !== 'undefined' &&
@@ -200,40 +206,72 @@ window.__ModuleLoader__.load({
       root.dispatchEvent(event)
     }
 
-    /* ---- Settings row ---- */
+    /* ---- Plugins row configuration page ---- */
 
     /**
-     * General-settings row selecting the composer Enter behaviour.
-     * @param {{ t: (key: string) => string }} props - slot-provided translator.
-     * @returns {import('react').ReactElement} the preference row.
+     * The component's own configuration page on
+     * Plugins → @gitsang/dsh-qol → @gitsang/dsh-enter-swap.
+     * Like every other plugin configuration page, edits stay staged until Save.
+     * @param {{ view?: string, t: (key: string) => string }} props - slot props.
+     * @returns {import('react').ReactElement|string} the page or its one-liner.
      */
-    function EnterSwapRow({ t }) {
-      const [value, setValue] = React.useState(mode)
-      React.useEffect(() => subscribe(() => setValue(mode)), [])
+    function EnterSwapConfig({ view, t }) {
+      const [current, setCurrent] = React.useState(mode)
+      const [draft, setDraft] = React.useState(mode)
+      React.useEffect(() => subscribe(() => {
+        setCurrent(mode)
+        setDraft(mode)
+      }), [])
+
+      if (view === 'summary') return t('summary')
+
+      const dirty = draft !== current
+      const save = () => {
+        if (!dirty) return
+        writeMode(draft)
+        setCurrent(mode)
+        setDraft(mode)
+      }
+
       return React.createElement(
         'div',
-        { className: 'dshEnterSwapRow', 'data-enter-swap-row': '' },
+        { className: 'dshEnterSwapPage', 'data-enter-swap-config': '' },
+        React.createElement(
+          'label',
+          { className: 'dshEnterSwapField' },
+          React.createElement('span', { className: 'dshEnterSwapTitle' }, t('title')),
+          React.createElement(
+            'select',
+            {
+              className: 'dshEnterSwapSelect',
+              value: draft,
+              'aria-label': t('title'),
+              onChange: (event) => setDraft(event.currentTarget.value),
+            },
+            React.createElement('option', { value: SWAP }, t('swap')),
+            React.createElement('option', { value: UPSTREAM }, t('default')),
+          ),
+        ),
+        React.createElement('p', { className: 'dshEnterSwapDesc' }, t('description')),
         React.createElement(
           'div',
-          { className: 'dshEnterSwapText' },
-          React.createElement('div', { className: 'dshEnterSwapTitle' }, t('title')),
-          React.createElement('div', { className: 'dshEnterSwapDesc' }, t('description')),
-        ),
-        React.createElement(
-          'select',
-          {
-            className: 'dshEnterSwapSelect',
-            value,
-            'aria-label': t('title'),
-            onChange: (event) => writeMode(event.currentTarget.value),
-          },
-          React.createElement('option', { value: SWAP }, t('swap')),
-          React.createElement('option', { value: UPSTREAM }, t('default')),
+          { className: 'dshEnterSwapActions' },
+          React.createElement(
+            'button',
+            {
+              type: 'button',
+              className: 'dshEnterSwapSave',
+              disabled: !dirty,
+              onClick: save,
+            },
+            t('save'),
+          ),
         ),
       )
     }
 
     const inject = ['slots', 'locale']
+    const ROW_KEY = '@gitsang/dsh-qol#enter-swap'
 
     /** @param {import('@deepseek-ai/cordis').Context} ctx - client plugin context. */
     function apply(ctx) {
@@ -259,15 +297,14 @@ window.__ModuleLoader__.load({
         return () => window.removeEventListener('storage', onStorage)
       }, 'enter-swap: cross-tab preference')
 
-      ctx.slots.inject('settings.general.item', () =>
+      ctx.slots.inject('plugins.row.config', () =>
         ctx.slots.register(
           {
-            name: 'settings.general.item',
-            id: 'enter-swap',
-            order: 22,
+            name: 'plugins.row.config',
+            key: ROW_KEY,
             locale: NS,
           },
-          EnterSwapRow,
+          EnterSwapConfig,
         ),
       )
 
@@ -336,6 +373,7 @@ window.__ModuleLoader__.load({
 
     exports.apply = apply
     exports.inject = inject
+    exports.__test = { EnterSwapConfig, ROW_KEY, SWAP, UPSTREAM, readMode, writeMode }
     return module.exports
   },
 })

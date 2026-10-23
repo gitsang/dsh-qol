@@ -26,21 +26,33 @@ importers:
       '@gitsang/dsh-session-tree':
         specifier: workspace:^
         version: link:packages/dsh-session-tree
+      '@gitsang/dsh-sidebar-terminal-enhance':
+        specifier: workspace:^
+        version: link:packages/dsh-sidebar-terminal-enhance
       '@gitsang/dsh-statusline':
         specifier: workspace:^
         version: link:packages/dsh-statusline
+      '@gitsang/dsh-terminal-color':
+        specifier: workspace:^
+        version: link:packages/dsh-terminal-color
 
   packages/dsh-enter-swap:
     dependencies:
       '@deepseek-ai/cordis':
         specifier: ~4.0.4
         version: 4.0.5
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
 
   packages/dsh-experimental-auto-review-enhance:
     dependencies:
       '@deepseek-ai/cordis':
         specifier: ^4.0.4
         version: 4.0.5
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
 
   packages/dsh-no-preview-notice:
     dependencies:
@@ -69,6 +81,15 @@ importers:
         specifier: ^18.2.0
         version: 18.3.1(react@18.3.1)
 
+  packages/dsh-sidebar-terminal-enhance:
+    dependencies:
+      '@deepseek-ai/cordis':
+        specifier: ~4.0.4
+        version: 4.0.5
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+
   packages/dsh-statusline:
     dependencies:
       '@deepseek-ai/cordis':
@@ -80,6 +101,15 @@ importers:
       react-dom:
         specifier: ^18.2.0
         version: 18.3.1(react@18.3.1)
+
+  packages/dsh-terminal-color:
+    dependencies:
+      '@deepseek-ai/cordis':
+        specifier: ~4.0.4
+        version: 4.0.5
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
 
 packages:
 

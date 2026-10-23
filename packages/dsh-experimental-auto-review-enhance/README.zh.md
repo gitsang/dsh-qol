@@ -1,8 +1,8 @@
 # dsh-experimental-auto-review-enhance
 
-让内置的 **Auto review** 权限预设出现在 **设置 → 权限**（新会话默认权限）下拉框里，
-同时不把 Auto review 写死成唯一默认值。选「仅可查看」「工作区内修改」「完全权限」时
-行为与官方完全一致。
+在组件自己的 **插件 → @gitsang/dsh-qol → @gitsang/dsh-experimental-auto-review-enhance**
+配置页里配置实验性的 **Auto review**：让新建的顶层会话默认使用 Auto review，并可选择
+拒绝理由的展示语言。不会向 DSH 的设置页注入任何配置项。
 
 适用于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
 `0.2.0-rc.2`，并要求 profile 里已启用
@@ -14,31 +14,49 @@
 
 - `defaultSettings()` 只接受配置表里的预设，profile 里写 `defaultPreset: auto`
   会让整个 `permission` 行在启动时激活失败（`permission: unknown preset "auto"`）；
-- 设置页那一行只渲染 `catalog().defaultOptions`，而它就是
-  `Object.keys(presets)`——只有配置表里的预设。
+- `auto` 只会在 Auto review 集成存活时存在。
+
+因此插件把自己的选择保存在独立的按 profile 状态文件里，并在创建会话时采用 Auto，
+而不是把不受支持的值写进权限 Config。
 
 ## 它做什么
 
-1. 包装 `permissionPresets.catalog()`，在 Auto review 集成存活时把 `auto`
-   追加进 `defaultOptions`（带描述），并发布
-   `permission-presets/catalog-changed`，让已经打开的设置面板立即重读。
-2. 包装活动的 `settings` 服务：
-   - `describe()` 把 `permission` 命名空间的 `value.defaultPreset` 报告为 `auto`；
-   - `mutate()` / `update()` 拦截 `defaultPreset: "auto"` 的写入，改为写入本插件
-     自己的状态文件。**真正的 `permission.defaultPreset` 始终是普通预设**，
-     所以组合永远能启动。
-3. 把真正新建的顶层会话切到 `auto`：包装
+1. 为本组件的配置页提供一个同源端点：Auto review 新会话默认值和拒绝理由语言。
+   页面会先暂存两项选择，只有点 **保存** 才写入。
+2. 把真正新建的顶层会话切到 `auto`：包装
    `permissionPresets.pinInitialPermission`（决定会话初始权限的唯一入口），
-   并保留一个 `prepend` 的 `session/created` 监听器作为回退（宿主没有该方法或
-   改名时用）。两条路径共用一个幂等的 `adopt()`，只对真正新建的会话生效。
+   并保留一个 `prepend` 的 `session/created` 监听器作为回退。两条路径共用同一个
+   幂等的 `adopt()`，只对真正新建的会话生效。
+3. 可选地指示 Auto review 审查器把自由文本 `reason` 写成简体中文。
 
-选择保存在：
+两项选择都保存在按 profile 划分的文件中：
 
 ```text
 $DSH_HOME/experimental-auto-review-enhance/<profile>.json
 ```
 
-切回普通预设时插件会自动清空它，并把写入交回官方服务。
+不会写入 `permission` Config；官方 `permission.defaultPreset` 始终保持正常值，
+所以组合永远能启动。
+
+## 配置组件
+
+1. 打开 **插件 → @gitsang/dsh-qol**，确认
+   `@gitsang/dsh-experimental-auto-review-enhance` 已启用。
+2. 打开这一行的 **配置** 页。
+3. 如果希望新顶层会话默认使用 Auto review，打开
+   **新会话默认使用 Auto review**。
+4. 选择 **拒绝理由语言**：**英文** 保持官方行为；**中文** 会让审查器用简体中文
+   写 `reason`。
+5. 点 **保存**。
+
+Auto review 审查器返回的 JSON 协议始终是英文（`risk`、`decision` 和可选的
+`reason`）。其中 `reason` 是审批弹窗或工具拒绝卡片上展示给你的原因说明。翻译
+有意只限于这句理由：`risk` 值、`decision` 值、JSON 成员名、审批审计以及模型可见的
+固定拒绝消息都保持英文，以保证审批协议稳定。这个选项只控制审查器，不会自动跟随
+DSH 界面语言。
+
+取消勾选 Auto 默认值并保存后，插件会清掉自己的覆盖，新会话重新遵循普通权限默认值；
+语言选择会保留。
 
 ## 安装
 
@@ -64,25 +82,27 @@ rm -rf ~/.dsh/experimental-auto-review-enhance
 
 ## 范围与限制
 
-- 只影响 **新建的顶层会话**；恢复/续接/fork 的会话保持原权限。
+- 只影响 **新建的顶层会话**；恢复、续接、fork 和 seeded 会话保持原权限。
 - 会话的权限在**创建那一刻**就固定了，早于第一条消息。点「新会话」时这个会话已经
-  创建并固定，所以之后改设置只对**改完以后新建**的会话生效。已经在的会话请用输入框
-  的权限控件或 `/permission <preset>` 切换。
+  创建并固定，所以之后改组件配置只对**改完以后新建**的会话生效。已经在的会话请用
+  输入框的权限控件或 `/permission <preset>` 切换。
 - 跳过子代理会话（Auto 集成本来就把子代理固定为 `never`）。
-- Auto review 集成未启用时：下拉框不会出现该项，设置行回退到真实默认值，
-  新会话也回退到官方行为。
-- 设置页选择 Auto **不会**弹官方的实验风险确认（官方只对「完全权限」和当前会话
-  控件里的 Auto 弹）；想要确认请用 `/permission auto`。
+- Auto review 集成未启用时，配置页会禁用 Auto 默认值控件，新会话遵循普通权限默认值；
+  已保存的 Auto 选择会保留下来，等集成恢复后继续生效。
+- 在组件配置页开启 Auto 默认值 **不会** 弹官方的实验风险确认（官方只对「完全权限」
+  和当前会话控件里的 Auto 弹）；想要确认请用 `/permission auto`。
 - 包装的是宿主实例方法和 `session/created` 时机，不是公开扩展点；DSH 升级后若
-  `catalog` / `settings.describe` / `pinInitialPermission` 改名会静默失效
-  （日志里有 `experimental-auto-review-enhance:` warning），但不会破坏启动。升级后发现新会话不再
-  进 Auto，先查宿主日志里的这个前缀。
+  `pinInitialPermission` 改名会静默失效（日志里有
+  `experimental-auto-review-enhance:` warning），但不会破坏启动。语言选项另外通过
+  `REVIEW_POLICY` 横幅识别官方 Auto review 系统提示词；若横幅改名，该选项不再生效，
+  但官方英文审查仍正常工作。
 
 ## 排错
 
-- **设置里能看到 Auto review，但新建会话仍是原权限。** 说明宿主加载的是旧版本
-  插件。更新并重启：
-  `cd ~/.dsh/profiles/web && pnpm update @gitsang/dsh-experimental-auto-review-enhance`，
+- **Auto 默认值复选框是禁用的。** 说明当前 profile 里的 Auto review 集成本身没有
+  启用。启用 `@deepseek-ai/dsh-experimental-auto-review` 后重启 Host。
+- **开启后新建会话仍是原权限。** 这个设置只对 **保存之后新建** 的会话生效。更新并
+  重启：`cd ~/.dsh/profiles/web && pnpm update @gitsang/dsh-experimental-auto-review-enhance`，
   然后重启 `dsh web`。
 - **状态文件位置。** 选择按 profile 保存在
   `$DSH_HOME/experimental-auto-review-enhance/<profile>.json`；旧包
@@ -94,15 +114,16 @@ rm -rf ~/.dsh/experimental-auto-review-enhance
 
 | 检查 | 结果 |
 | --- | --- |
-| `catalog().defaultOptions` 多出 `auto`（`Auto review`） | 通过 |
-| 设置写入 auto 后 `describe()` 返回 `auto` | 通过 |
+| 组件配置页可以读取并写入 Auto 新会话默认值 | 通过 |
+| Auto 默认值不会注入到 **设置 → 权限** | 通过 |
 | profile patch 里没有非法的 `defaultPreset: auto` | 通过 |
-| 切回普通预设后状态清空、写入交回官方 | 通过 |
 | 真实 web 组合里 `agents.create()` 的第 0 条事件就是 `permission/preset: auto` | 通过 |
 | 子代理会话不被改动 | 通过 |
-| Auto 集成不存在时降级为官方行为 | 通过 |
+| Auto 集成不存在时控件禁用并降级为官方行为 | 通过 |
+| 中文语言只给 Auto review 请求追加 reason 语言指令，不影响其他 LLM 调用 | 通过 |
+| 选项为英文时不追加任何指令 | 通过 |
 
-`npm test` 有 18 个基于假 Host 的单元测试。
+`npm test` 包含基于假 Host 的单元测试，覆盖配置端点、状态字段合并和浏览器组件配置页的注册。
 
 ## License
 

@@ -16,6 +16,12 @@
       name: '@gitsang/dsh-reset-terminals'
       inject: [commands]
 
+    - id: terminal-color
+      name: '@gitsang/dsh-terminal-color'
+
+    - id: sidebar-terminal-enhance
+      name: '@gitsang/dsh-sidebar-terminal-enhance'
+
     - id: statusline
       name: '@gitsang/dsh-statusline'
 

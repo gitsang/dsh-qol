@@ -1,9 +1,10 @@
 /**
  * Browser half of @gitsang/dsh-session-tree.
  *
- * Adds a `Tree View` Conversation tab and a compact edit affordance on user
- * messages. Tree data and branch mutations travel through the package's
- * same-origin Host route; navigation uses the public Workspace UI service.
+ * Draws Session branch lineage inline in the native Trajectory ledger and adds
+ * a compact edit affordance on user messages. Tree data and branch mutations
+ * travel through the package's same-origin Host route; navigation uses the
+ * public Workspace UI service.
  */
 window.__ModuleLoader__.load({
   id: '@gitsang/dsh-session-tree',
@@ -17,49 +18,17 @@ window.__ModuleLoader__.load({
     const NS = 'sessionTree'
 
     const zh = {
-      tab: 'Tree View',
-      title: '会话分支树',
-      subtitle: '{count} 个分支 · 当前 {current}',
-      refresh: '刷新',
-      loading: '正在读取会话树…',
-      empty: '这个会话还没有可展示的事件。',
-      error: '读取会话树失败',
-      retry: '重试',
-      current: '当前',
-      archived: '已归档',
-      subagent: '子代理',
-      open: '打开',
-      branches: '分支',
-      selected: '选中的分支',
-      timeline: '事件时间线',
-      forkAfter: '从此后分叉',
-      forkBefore: '从此前分叉',
-      editAndFork: '编辑并分叉',
-      forkLatest: '从最新事件分叉',
-      exactSeq: '指定事件序号',
-      exactPlaceholder: '事件 #',
-      forkExact: '分叉',
       cancel: '取消',
       send: '发送',
       saving: '处理中…',
       editHint: '编辑后会从这条用户消息所在轮次之前分叉，并发送修改后的内容。',
-      forkHint: '分支会从所选的已持久化事件之后开始，原会话不会被修改。',
       noEvents: '没有可显示的事件（只有继承前缀或非展示事件）。',
       emptyDraft: '消息不能为空。',
-      eventSeq: '事件 #{seq}',
-      turn: '第 {turn} 轮',
-      branchFrom: '分叉自 #{seq}',
-      ownTurns: '{count} 轮',
-      ownEvents: '{count} 个事件',
       userEdit: '编辑消息',
       userFork: '分叉',
       editTitle: '编辑这条消息',
       childCreated: '已创建新分支',
-      openFailed: '新分支已创建，但暂时无法打开',
       requestFailed: '请求失败',
-      truncated: '只显示了前 {count} 个分支。',
-      path: '当前路径',
-      running: '生成中',
       'role.user': '用户',
       'role.context': '上下文',
       'role.assistant': '助手',
@@ -71,49 +40,17 @@ window.__ModuleLoader__.load({
     }
 
     const en = {
-      tab: 'Tree View',
-      title: 'Conversation tree',
-      subtitle: '{count} branches · current {current}',
-      refresh: 'Refresh',
-      loading: 'Reading the conversation tree…',
-      empty: 'This conversation has no displayable events yet.',
-      error: 'Could not read the conversation tree',
-      retry: 'Retry',
-      current: 'Current',
-      archived: 'Archived',
-      subagent: 'Subagent',
-      open: 'Open',
-      branches: 'Branches',
-      selected: 'Selected branch',
-      timeline: 'Event timeline',
-      forkAfter: 'Fork after',
-      forkBefore: 'Fork before',
-      editAndFork: 'Edit & fork',
-      forkLatest: 'Fork at latest event',
-      exactSeq: 'Exact event',
-      exactPlaceholder: 'Event #',
-      forkExact: 'Fork',
       cancel: 'Cancel',
       send: 'Send',
       saving: 'Working…',
       editHint: 'Editing forks before the Turn containing this user message, then sends the edited prompt.',
-      forkHint: 'A branch begins after the chosen durable event. The source Session is never rewritten.',
       noEvents: 'No displayable events (inherited prefix or non-presentation events only).',
       emptyDraft: 'The message cannot be empty.',
-      eventSeq: 'Event #{seq}',
-      turn: 'Turn {turn}',
-      branchFrom: 'forked at #{seq}',
-      ownTurns: '{count} turns',
-      ownEvents: '{count} events',
       userEdit: 'Edit message',
       userFork: 'Branch',
       editTitle: 'Edit this message',
       childCreated: 'New branch created',
-      openFailed: 'The branch was created but could not be opened yet',
       requestFailed: 'Request failed',
-      truncated: 'Showing the first {count} branches.',
-      path: 'Current path',
-      running: 'Running',
       'role.user': 'User',
       'role.context': 'Context',
       'role.assistant': 'Assistant',
@@ -134,64 +71,12 @@ window.__ModuleLoader__.load({
 
     const CSS_ID = '@gitsang/dsh-session-tree/SessionTree.css'
     const CSS = [
-      '.dst-root{box-sizing:border-box;height:100%;min-height:0;display:flex;flex-direction:column;background:var(--dsw-alias-bg-primary);color:var(--dsw-alias-label-primary);overflow:hidden}',
-      '.dst-toolbar{flex:none;display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:.5px solid var(--dsw-alias-border-l2);min-width:0}',
-      '.dst-toolbarMain{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}',
-      '.dst-title{font-size:14px;font-weight:600;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-      '.dst-subtitle{font-size:11.5px;line-height:16px;color:var(--dsw-alias-label-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-      '.dst-toolbarActions{display:flex;align-items:center;gap:6px;flex:none}',
       '.dst-button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:4px;flex:none;border:.5px solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-secondary);border-radius:8px;padding:4px 9px;font:inherit;font-size:12px;line-height:18px;cursor:pointer;white-space:nowrap}',
       '.dst-button:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
       '.dst-button:disabled{opacity:.45;cursor:default}',
       '.dst-button[data-primary]{background:var(--dsw-alias-state-business-primary,#4b8dff);border-color:transparent;color:#fff}',
       '.dst-button[data-primary]:hover:not(:disabled){background:var(--dsw-alias-state-business-primary,#4b8dff);filter:brightness(1.06);color:#fff}',
-      '.dst-body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(240px,.85fr) minmax(300px,1.15fr)}',
-      '.dst-pane{min-width:0;min-height:0;overflow:auto;padding:14px 16px}',
-      '.dst-pane + .dst-pane{border-left:.5px solid var(--dsw-alias-border-l2)}',
-      '.dst-sectionLabel{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary);margin:0 0 8px}',
-      '.dst-tree{display:flex;flex-direction:column;gap:0;min-width:max-content}',
-      '.dst-branch{position:relative;min-width:0}',
-      '.dst-children{margin-left:16px;padding-left:14px;border-left:1px solid color-mix(in srgb,var(--dsw-alias-label-tertiary,#888) 28%,transparent);display:flex;flex-direction:column;gap:7px;padding-top:7px}',
-      '.dst-session{box-sizing:border-box;display:flex;align-items:flex-start;gap:8px;width:100%;min-width:240px;max-width:380px;text-align:left;border:.5px solid color-mix(in srgb,var(--dsw-alias-label-tertiary,#888) 26%,transparent);background:color-mix(in srgb,var(--dsw-alias-label-tertiary,#888) 7%,transparent);color:inherit;border-radius:11px;padding:9px 10px;cursor:pointer;font:inherit}',
-      '.dst-session:hover{border-color:color-mix(in srgb,var(--dsw-alias-label-tertiary,#888) 48%,transparent);background:var(--dsw-alias-interactive-bg-hover)}',
-      '.dst-session[data-current]{border-color:var(--dsw-alias-state-business-primary,#4b8dff);box-shadow:0 0 0 1px color-mix(in srgb,var(--dsw-alias-state-business-primary,#4b8dff) 45%,transparent)}',
-      '.dst-session[data-selected]{background:color-mix(in srgb,var(--dsw-alias-state-business-primary,#4b8dff) 11%,transparent)}',
-      '.dst-session[data-on-path]:not([data-current]){border-left:3px solid color-mix(in srgb,var(--dsw-alias-state-business-primary,#4b8dff) 60%,transparent)}',
-      '.dst-sessionGlyph{flex:none;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;border-radius:7px;background:color-mix(in srgb,var(--dsw-alias-label-tertiary,#888) 16%,transparent);color:var(--dsw-alias-label-secondary);font-size:12px}',
-      '.dst-session[data-current] .dst-sessionGlyph{background:color-mix(in srgb,var(--dsw-alias-state-business-primary,#4b8dff) 18%,transparent);color:var(--dsw-alias-state-business-primary,#4b8dff)}',
-      '.dst-sessionMain{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}',
-      '.dst-sessionTitle{font-size:12.5px;font-weight:600;line-height:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-      '.dst-sessionMeta{font-size:11px;line-height:15px;color:var(--dsw-alias-label-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-      '.dst-badges{display:flex;gap:4px;flex-wrap:wrap;margin-top:2px}',
-      '.dst-badge{font-size:10px;line-height:14px;border-radius:999px;padding:0 6px;background:color-mix(in srgb,var(--dsw-alias-label-tertiary,#888) 16%,transparent);color:var(--dsw-alias-label-secondary)}',
-      '.dst-badge[data-accent]{background:color-mix(in srgb,var(--dsw-alias-state-business-primary,#4b8dff) 16%,transparent);color:var(--dsw-alias-state-business-primary,#4b8dff)}',
-      '.dst-detailHead{display:flex;align-items:flex-start;gap:10px;padding-bottom:10px;border-bottom:.5px solid var(--dsw-alias-border-l2);margin-bottom:10px}',
-      '.dst-detailTitle{font-size:13px;font-weight:600;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}',
-      '.dst-detailId{font-size:10.5px;line-height:15px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}',
-      '.dst-detailActions{margin-left:auto;display:flex;gap:6px;flex:none}',
-      '.dst-hint{font-size:11.5px;line-height:17px;color:var(--dsw-alias-label-tertiary);margin:0 0 12px;padding:8px 10px;border-radius:8px;background:color-mix(in srgb,var(--dsw-alias-label-tertiary,#888) 8%,transparent)}',
-      '.dst-turnGroup{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}',
-      '.dst-turnLabel{font-size:10.5px;font-weight:600;color:var(--dsw-alias-label-tertiary);letter-spacing:.03em;text-transform:uppercase}',
-      '.dst-event{border:.5px solid color-mix(in srgb,var(--dsw-alias-label-tertiary,#888) 20%,transparent);border-radius:9px;padding:8px 9px;background:color-mix(in srgb,var(--dsw-alias-label-tertiary,#888) 4%,transparent)}',
-      '.dst-event[data-editable]{border-color:color-mix(in srgb,var(--dsw-alias-state-business-primary,#4b8dff) 32%,transparent)}',
-      '.dst-eventHead{display:flex;align-items:center;gap:6px;min-width:0}',
-      '.dst-role{font-size:10px;line-height:15px;font-weight:600;border-radius:999px;padding:0 6px;background:color-mix(in srgb,var(--dsw-alias-label-tertiary,#888) 17%,transparent);color:var(--dsw-alias-label-secondary);flex:none}',
-      '.dst-role[data-role=user]{background:color-mix(in srgb,var(--dsw-alias-state-business-primary,#4b8dff) 16%,transparent);color:var(--dsw-alias-state-business-primary,#4b8dff)}',
-      '.dst-role[data-role=assistant]{background:color-mix(in srgb,var(--dsw-alias-state-success-primary,#20a464) 14%,transparent);color:var(--dsw-alias-state-success-primary,#20a464)}',
-      '.dst-role[data-role=tool],.dst-role[data-role=tool-result]{background:color-mix(in srgb,var(--dsw-alias-state-warning-primary,#c98a00) 14%,transparent);color:var(--dsw-alias-state-warning-primary,#c98a00)}',
-      '.dst-seq{font-size:10px;line-height:15px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums;flex:none}',
-      '.dst-eventText{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);margin-top:4px;white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}',
-      '.dst-eventActions{display:flex;gap:5px;justify-content:flex-end;margin-top:6px;flex-wrap:wrap}',
-      '.dst-editor{margin-top:7px;display:flex;flex-direction:column;gap:6px}',
-      '.dst-textarea{box-sizing:border-box;width:100%;min-height:70px;resize:vertical;border:.5px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-primary);color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;line-height:18px;padding:7px 8px;outline:none}',
-      '.dst-textarea:focus{border-color:var(--dsw-alias-state-business-primary,#4b8dff)}',
-      '.dst-exact{display:flex;align-items:center;gap:6px;padding-top:10px;margin-top:8px;border-top:.5px solid var(--dsw-alias-border-l2);flex-wrap:wrap}',
-      '.dst-exactLabel{font-size:11px;color:var(--dsw-alias-label-tertiary)}',
-      '.dst-input{width:94px;box-sizing:border-box;border:.5px solid var(--dsw-alias-border-l2);border-radius:7px;background:var(--dsw-alias-bg-primary);color:var(--dsw-alias-label-primary);font:inherit;font-size:11.5px;line-height:18px;padding:3px 7px;outline:none}',
-      '.dst-input:focus{border-color:var(--dsw-alias-state-business-primary,#4b8dff)}',
-      '.dst-empty{margin:auto;padding:28px 20px;text-align:center;font-size:12.5px;line-height:19px;color:var(--dsw-alias-label-tertiary);max-width:420px}',
       '.dst-error{font-size:11.5px;line-height:17px;color:var(--dsw-alias-state-error-primary,#e5484d);padding:7px 9px;border-radius:7px;background:color-mix(in srgb,var(--dsw-alias-state-error-primary,#e5484d) 9%,transparent);margin:8px 0}',
-      '.dst-loading{display:flex;align-items:center;justify-content:center;height:100%;font-size:12.5px;color:var(--dsw-alias-label-tertiary)}',
       '.dst-hostAction{display:inline-flex;align-items:center;justify-content:center;width:calc(28px + var(--dsh-content-font-delta,0px));height:calc(28px + var(--dsh-content-font-delta,0px));padding:6px;border:none;border-radius:var(--dsw-radius-sm);background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer}',
       '.dst-hostAction:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}',
       '.dst-hostAction:disabled{opacity:.4;cursor:default}',
@@ -206,7 +91,32 @@ window.__ModuleLoader__.load({
       '.dst-modalActions{display:flex;justify-content:flex-end;gap:7px;flex-wrap:wrap}',
       '.dst-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:1300;max-width:min(620px,calc(100vw - 32px));box-sizing:border-box;border-radius:10px;padding:9px 13px;background:var(--dsw-alias-bg-layer-1,var(--dsw-alias-bg-primary));box-shadow:var(--dsw-elevation-prominent,0 10px 30px rgba(0,0,0,.24));color:var(--dsw-alias-label-primary);font-size:12px;line-height:18px}',
       '.dst-toast[data-error]{color:var(--dsw-alias-state-error-primary,#e5484d)}',
-      '@media (max-width:760px){.dst-body{grid-template-columns:1fr;grid-template-rows:minmax(180px,.8fr) minmax(220px,1.2fr)}.dst-pane + .dst-pane{border-left:0;border-top:.5px solid var(--dsw-alias-border-l2)}.dst-session{max-width:none}}',
+      /* Inline Session graph inside the native Trajectory ledger. */
+      'table[data-dst-graph=on] > colgroup > col:first-child{min-width:84px}',
+      'table[data-dst-graph=on] td:first-child{position:relative;overflow:visible!important}',
+      'table[data-dst-graph=on] [data-role-kind]{box-sizing:border-box;width:19px!important;height:19px!important;min-width:19px!important;padding:0!important;justify-content:center!important;border-radius:6px!important;transform:translateX(var(--dst-lane-offset,0px));position:relative;z-index:2;outline:1.5px solid color-mix(in srgb,var(--dst-lane-color,#4b8dff) 55%,transparent);outline-offset:1px}',
+      'table[data-dst-graph=on] [data-role-kind] > span:last-child{display:none!important}',
+      'table[data-dst-graph=on] [data-role-kind] > span:first-child{display:inline-flex!important;width:13px!important;height:13px!important;opacity:1!important;transform:none!important}',
+      'table[data-dst-graph=on] [data-role-kind] > span:first-child svg{width:13px!important;height:13px!important}',
+      '.dstg-rowGraph{position:absolute;z-index:1;top:0;left:0;overflow:visible;pointer-events:none}',
+      '.dstg-rowGraph path{fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}',
+      '.dstg-synthRow{height:30px}',
+      '.dstg-synthRow > td{height:30px;border-bottom:.5px solid var(--dsw-alias-border-l1);background:color-mix(in srgb,var(--dst-lane-color,#4b8dff) 2.5%,transparent)}',
+      '.dstg-synthRow:hover > td{background:var(--dsw-alias-interactive-bg-hover)}',
+      'tr[data-dst-lane] > td:first-child{position:relative;overflow:visible!important}',
+      '.dstg-synthEvent{position:relative;height:30px;min-width:0}',
+      '.dstg-node{position:absolute;z-index:2;box-sizing:border-box;width:19px;height:19px;margin:-9.5px 0 0 -9.5px;display:grid;place-items:center;border:1.5px solid var(--dst-lane-color,#4b8dff);border-radius:6px;background:color-mix(in srgb,var(--dst-lane-color,#4b8dff) 8%,var(--dsw-alias-bg-layer-1));color:var(--dst-lane-color,#4b8dff);box-shadow:0 0 0 2px var(--dsw-alias-bg-layer-1)}',
+      '.dstg-node svg{display:block;width:12px;height:12px}',
+      '.dstg-synthContent{display:flex;align-items:center;gap:6px;min-width:0;padding:0 8px 0 4px;overflow:hidden;color:var(--dsw-alias-label-primary);font-size:11px;line-height:18px;white-space:nowrap}',
+      '.dstg-synthRole{flex:none;color:var(--dsw-alias-label-tertiary);font-size:9.5px}',
+      '.dstg-synthText{min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--dsw-alias-label-secondary)}',
+      '.dstg-synthSeq{flex:none;margin-left:auto;color:var(--dsw-alias-label-tertiary);font:9.5px var(--ds-font-family-code);font-variant-numeric:tabular-nums}',
+      '.dstg-branchChip{display:inline-flex;flex:none;align-items:center;gap:4px;height:16px;padding:0 5px;border:1px solid color-mix(in srgb,var(--dst-lane-color,#4b8dff) 30%,transparent);border-radius:999px;background:color-mix(in srgb,var(--dst-lane-color,#4b8dff) 9%,transparent);color:color-mix(in srgb,var(--dst-lane-color,#4b8dff) 82%,var(--dsw-alias-label-primary));font-size:9px;line-height:1}',
+      '.dstg-branchChip::before{content:"";width:4px;height:4px;border-radius:50%;background:var(--dst-lane-color,#4b8dff)}',
+      '.dstg-forkNote{flex:none;color:var(--dsw-alias-label-tertiary);font-size:9px;font-variant-numeric:tabular-nums}',
+      '.dstg-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:1300;max-width:min(620px,calc(100vw - 32px));box-sizing:border-box;border-radius:10px;padding:9px 13px;background:var(--dsw-alias-bg-layer-1,var(--dsw-alias-bg-primary));box-shadow:var(--dsw-elevation-prominent,0 10px 30px rgba(0,0,0,.24));color:var(--dsw-alias-label-primary);font-size:12px;line-height:18px}',
+      '.dstg-toast[data-error]{color:var(--dsw-alias-state-error-primary,#e5484d)}',
+      '@media (prefers-reduced-motion:no-preference){table[data-dst-graph=on] [data-role-kind]{transition:transform .18s var(--ds-ease-in-out)}}',
     ].join('')
 
     function realGlobal() {
@@ -232,74 +142,9 @@ window.__ModuleLoader__.load({
       return () => tag.remove()
     }
 
-    /** Text blocks only; tree edits intentionally preserve text and leave files/images to the source message. */
-    function textFromContent(content) {
-      if (!Array.isArray(content)) return ''
-      return content
-        .filter((part) => part !== null && typeof part === 'object' && part.type === 'text')
-        .map((part) => typeof part.text === 'string' ? part.text : '')
-        .join('\n')
-    }
-
-    function imageParts(content) {
-      if (!Array.isArray(content)) return []
-      return content
-        .filter((part) => part !== null && typeof part === 'object' && part.type === 'image' && part.attachment !== undefined)
-        .map((part) => ({ attachment: part.attachment }))
-    }
-
     function sessionTitle(list, sessionId) {
       const row = list?.byId?.[sessionId]
       return typeof row?.displayTitle === 'string' && row.displayTitle.length > 0 ? row.displayTitle : sessionId
-    }
-
-    function countPath(data, currentId) {
-      const byId = new Map((data?.sessions ?? []).map((session) => [session.sessionId, session]))
-      const path = new Set()
-      let cursor = currentId
-      for (let guard = 0; guard < 100 && typeof cursor === 'string'; guard += 1) {
-        if (path.has(cursor)) break
-        path.add(cursor)
-        const parent = byId.get(cursor)?.parentSessionId
-        if (typeof parent !== 'string') break
-        cursor = parent
-      }
-      return path
-    }
-
-    function buildChildren(data) {
-      const byId = new Map((data?.sessions ?? []).map((session) => [session.sessionId, session]))
-      const children = new Map()
-      for (const session of data?.sessions ?? []) {
-        const parent = session.parentSessionId
-        if (typeof parent !== 'string' || !byId.has(parent)) continue
-        const bucket = children.get(parent)
-        if (bucket === undefined) children.set(parent, [session.sessionId])
-        else bucket.push(session.sessionId)
-      }
-      for (const bucket of children.values()) {
-        bucket.sort((left, right) => {
-          const a = byId.get(left)?.createdAt ?? 0
-          const b = byId.get(right)?.createdAt ?? 0
-          return a - b || left.localeCompare(right)
-        })
-      }
-      return { byId, children }
-    }
-
-    function groupByTurn(events) {
-      const groups = []
-      const index = new Map()
-      for (const event of Array.isArray(events) ? events : []) {
-        const key = typeof event.turn === 'number' ? event.turn : null
-        if (!index.has(key)) {
-          const group = { turn: key, events: [] }
-          index.set(key, group)
-          groups.push(group)
-        }
-        index.get(key).events.push(event)
-      }
-      return groups
     }
 
     function useSessionList(sessions) {
@@ -313,12 +158,12 @@ window.__ModuleLoader__.load({
         : { byId: {} }
     }
 
-    function useTree(sessionId) {
+    function useTree(sessionId, enabled = true) {
       const [state, setState] = React.useState({ loading: true, data: null, error: null })
       const [tick, setTick] = React.useState(0)
       const requestId = React.useRef(0)
       const load = React.useCallback(async () => {
-        if (typeof sessionId !== 'string' || sessionId.length === 0) return
+        if (!enabled || typeof sessionId !== 'string' || sessionId.length === 0) return
         const currentRequest = requestId.current + 1
         requestId.current = currentRequest
         setState((previous) => ({ loading: true, data: previous.data, error: null }))
@@ -332,7 +177,7 @@ window.__ModuleLoader__.load({
             setState((previous) => ({ loading: false, data: previous.data, error: error instanceof Error ? error.message : String(error) }))
           }
         }
-      }, [sessionId])
+      }, [enabled, sessionId])
       React.useEffect(() => {
         load()
       }, [load, tick])
@@ -375,369 +220,493 @@ window.__ModuleLoader__.load({
       }
     }
 
-    function roleLabel(role, translate) {
-      return translate(`role.${role}`)
+    const LANE_COLORS = ['#4b8dff', '#8f6bff', '#e35d83', '#20a464', '#c98a00', '#2aa8b8']
+    const LANE_STEP = 24
+
+    function laneColor(lane) {
+      return LANE_COLORS[Math.max(0, lane) % LANE_COLORS.length]
     }
 
-    function SessionCard({ session, currentId, selectedId, path, title, row, onSelect, onOpen, translate }) {
-      const current = session.sessionId === currentId
-      const onPath = path.has(session.sessionId)
-      const selected = session.sessionId === selectedId
-      const branchMeta = session.forkAtSeq === null || session.forkAtSeq === undefined
-        ? `${translate('ownTurns', { count: session.ownTurns ?? 0 })} · ${translate('ownEvents', { count: session.events?.length ?? 0 })}`
-        : `${translate('branchFrom', { seq: session.forkAtSeq })} · ${translate('ownTurns', { count: session.ownTurns ?? 0 })}`
-      return React.createElement('div', {
-        className: 'dst-session',
-        role: 'button',
-        tabIndex: 0,
-        'data-current': current || undefined,
-        'data-selected': selected || undefined,
-        'data-on-path': onPath || undefined,
-        onClick: () => onSelect(session.sessionId),
-        onKeyDown: (event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault()
-            onSelect(session.sessionId)
-          }
-        },
-        onDoubleClick: () => onOpen(session),
-      },
-        React.createElement('span', { className: 'dst-sessionGlyph', 'aria-hidden': true }, current ? '●' : session.parentSessionId === null ? '◆' : '↳'),
-        React.createElement('span', { className: 'dst-sessionMain' },
-          React.createElement('span', { className: 'dst-sessionTitle' }, title),
-          React.createElement('span', { className: 'dst-sessionMeta' }, branchMeta),
-          React.createElement('span', { className: 'dst-badges' },
-            current ? React.createElement('span', { className: 'dst-badge', 'data-accent': true }, translate('current')) : null,
-            row?.running ? React.createElement('span', { className: 'dst-badge' }, '● ' + translate('running')) : null,
-            session.archived ? React.createElement('span', { className: 'dst-badge' }, translate('archived')) : null,
-            session.origin === 'subagent' ? React.createElement('span', { className: 'dst-badge' }, translate('subagent')) : null,
-            session.error ? React.createElement('span', { className: 'dst-badge' }, translate('error')) : null,
-          ),
-        ),
-        React.createElement('button', {
-          type: 'button',
-          className: 'dst-button',
-          onClick: (event) => {
-            event.stopPropagation()
-            onOpen(session)
-          },
-        }, translate('open')),
-      )
-    }
-
-    function Branch({ id, byId, children, currentId, selectedId, path, list, onSelect, onOpen, translate, seen }) {
-      const session = byId.get(id)
-      if (session === undefined || seen.has(id)) return null
-      const nextSeen = new Set(seen)
-      nextSeen.add(id)
-      const kids = children.get(id) ?? []
-      return React.createElement('div', { className: 'dst-branch' },
-        React.createElement(SessionCard, {
-          session,
-          currentId,
-          selectedId,
-          path,
-          title: sessionTitle(list, id),
-          row: list?.byId?.[id],
-          onSelect,
-          onOpen,
-          translate,
-        }),
-        kids.length > 0
-          ? React.createElement('div', { className: 'dst-children' },
-              kids.map((child) => React.createElement(Branch, {
-                key: child,
-                id: child,
-                byId,
-                children,
-                currentId,
-                selectedId,
-                path,
-                list,
-                onSelect,
-                onOpen,
-                translate,
-                seen: nextSeen,
-              })))
-          : null,
-      )
-    }
-
-    function EventRow({ event, selectedSessionId, busy, editingSeq, draft, error, translate, onEdit, onDraft, onCancelEdit, onSubmitEdit, onFork }) {
-      const editing = editingSeq === event.seq
-      return React.createElement('div', {
-        className: 'dst-event',
-        'data-editable': event.editable || undefined,
-        'data-seq': event.seq,
-      },
-        React.createElement('div', { className: 'dst-eventHead' },
-          React.createElement('span', { className: 'dst-role', 'data-role': event.role }, roleLabel(event.role, translate)),
-          React.createElement('span', { className: 'dst-seq' }, translate('eventSeq', { seq: event.seq })),
-          typeof event.turn === 'number' ? React.createElement('span', { className: 'dst-seq' }, translate('turn', { turn: event.turn })) : null,
-        ),
-        event.text !== '' ? React.createElement('div', { className: 'dst-eventText' }, event.text) : null,
-        editing
-          ? React.createElement('div', { className: 'dst-editor' },
-              React.createElement('textarea', {
-                className: 'dst-textarea',
-                value: draft,
-                autoFocus: true,
-                onChange: (input) => onDraft(input.target.value),
-                onKeyDown: (input) => {
-                  if (input.key === 'Escape') onCancelEdit()
-                  if (input.key === 'Enter' && (input.metaKey || input.ctrlKey)) onSubmitEdit(event)
-                },
-              }),
-              error !== null ? React.createElement('div', { className: 'dst-error' }, error) : null,
-              React.createElement('div', { className: 'dst-eventActions' },
-                React.createElement('button', { type: 'button', className: 'dst-button', disabled: busy, onClick: onCancelEdit }, translate('cancel')),
-                React.createElement('button', { type: 'button', className: 'dst-button', 'data-primary': true, disabled: busy || draft.trim() === '', onClick: () => onSubmitEdit(event) }, busy ? translate('saving') : translate('send')),
-              ),
-            )
-          : React.createElement('div', { className: 'dst-eventActions' },
-              event.editable
-                ? React.createElement('button', {
-                    type: 'button',
-                    className: 'dst-button',
-                    'data-primary': true,
-                    disabled: busy,
-                    onClick: () => onEdit(event),
-                  }, translate('editAndFork'))
-                : null,
-              React.createElement('button', {
-                type: 'button',
-                className: 'dst-button',
-                disabled: busy,
-                onClick: () => onFork(selectedSessionId, event.seq),
-              }, translate('forkAfter')),
-            ),
-      )
-    }
-
-    function TreeView(props) {
-      const sessionId = props.sessionId
-      const sessions = props.sessions
-      const uiWorkspace = props.uiWorkspace
-      const list = useSessionList(sessions)
-      const tree = useTree(sessionId)
-      const data = tree.data
-      const [selectedId, setSelectedId] = React.useState(sessionId)
-      const [editingSeq, setEditingSeq] = React.useState(null)
-      const [draft, setDraft] = React.useState('')
-      const [busy, setBusy] = React.useState(false)
-      const [error, setError] = React.useState(null)
-      const [exactSeq, setExactSeq] = React.useState('')
-      const mutate = React.useMemo(() => makeMutation(sessions, uiWorkspace), [sessions, uiWorkspace])
-
-      React.useEffect(() => {
-        setSelectedId(sessionId)
-        setEditingSeq(null)
-        setError(null)
-      }, [sessionId])
-
-      const byId = data?.sessions !== undefined ? new Map(data.sessions.map((session) => [session.sessionId, session])) : new Map()
-      const selected = byId.get(selectedId) ?? byId.get(sessionId) ?? null
-      const treeShape = React.useMemo(() => buildChildren(data), [data])
-      const path = React.useMemo(() => countPath(data, sessionId), [data, sessionId])
-      const rootId = data?.rootId
-      const totalSessions = data?.totalSessions ?? data?.sessions?.length ?? 0
-
-      const onOpen = React.useCallback(async (session) => {
-        setError(null)
-        try {
-          if (session.archived) await postJson({ action: 'activate', sessionId: session.sessionId })
-          await openWhenListed(sessions, uiWorkspace, session.sessionId)
-        } catch (openError) {
-          setError(openError instanceof Error ? openError.message : String(openError))
-        }
-      }, [sessions, uiWorkspace])
-
-      const startEdit = React.useCallback((event) => {
-        setEditingSeq(event.seq)
-        setDraft(event.text)
-        setError(null)
-      }, [])
-
-      const submitEdit = React.useCallback(async (event) => {
-        if (draft.trim() === '') {
-          setError(t('emptyDraft'))
-          return
-        }
-        setBusy(true)
-        setError(null)
-        try {
-          await mutate({
-            action: 'edit',
-            sessionId: selectedId,
-            eventSeq: event.seq,
-            text: draft,
-            stopPrevious: true,
-            clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          })
-          setEditingSeq(null)
-        } catch (editError) {
-          if (typeof editError.childSessionId === 'string') {
-            try { await openWhenListed(sessions, uiWorkspace, editError.childSessionId) } catch {}
-          }
-          setError(editError instanceof Error ? editError.message : String(editError))
-        } finally {
-          setBusy(false)
-        }
-      }, [draft, mutate, selectedId, sessions, uiWorkspace])
-
-      const forkAfter = React.useCallback(async (sourceId, atSeq) => {
-        setBusy(true)
-        setError(null)
-        try {
-          await mutate({ action: 'fork', sessionId: sourceId, atSeq })
-        } catch (forkError) {
-          setError(forkError instanceof Error ? forkError.message : String(forkError))
-        } finally {
-          setBusy(false)
-        }
-      }, [mutate])
-
-      const forkLatest = React.useCallback(async () => {
-        if (selected === null) return
-        setBusy(true)
-        setError(null)
-        try {
-          await mutate({ action: 'fork-last', sessionId: selected.sessionId })
-        } catch (forkError) {
-          setError(forkError instanceof Error ? forkError.message : String(forkError))
-        } finally {
-          setBusy(false)
-        }
-      }, [mutate, selected])
-
-      const forkExact = React.useCallback(async () => {
-        const value = Number(exactSeq)
-        if (!Number.isSafeInteger(value) || value < 0) return
-        await forkAfter(selectedId, value)
-      }, [exactSeq, forkAfter, selectedId])
-
-      if (tree.loading && data === null) {
-        return React.createElement('div', { className: 'dst-root' }, React.createElement('div', { className: 'dst-loading' }, t('loading')))
+    function familyChildren(data) {
+      const byId = new Map((data?.sessions ?? []).map((session) => [session.sessionId, session]))
+      const children = new Map()
+      for (const session of data?.sessions ?? []) {
+        const parent = session.parentSessionId
+        if (typeof parent !== 'string' || !byId.has(parent)) continue
+        const bucket = children.get(parent)
+        if (bucket === undefined) children.set(parent, [session.sessionId])
+        else bucket.push(session.sessionId)
       }
+      return { byId, children }
+    }
 
-      const toolbar = React.createElement('div', { className: 'dst-toolbar' },
-        React.createElement('div', { className: 'dst-toolbarMain' },
-          React.createElement('div', { className: 'dst-title' }, t('title')),
-          React.createElement('div', { className: 'dst-subtitle' }, t('subtitle', { count: totalSessions, current: sessionTitle(list, sessionId) })),
-        ),
-        React.createElement('div', { className: 'dst-toolbarActions' },
-          React.createElement('button', { type: 'button', className: 'dst-button', disabled: tree.loading, onClick: tree.reload }, tree.loading ? t('saving') : t('refresh')),
-        ),
-      )
+    function chainTo(data, sessionId) {
+      const { byId } = familyChildren(data)
+      const chain = []
+      const seen = new Set()
+      let cursor = sessionId
+      while (typeof cursor === 'string' && byId.has(cursor) && !seen.has(cursor)) {
+        seen.add(cursor)
+        chain.unshift(byId.get(cursor))
+        const parent = byId.get(cursor)?.parentSessionId
+        cursor = typeof parent === 'string' ? parent : null
+      }
+      return chain
+    }
 
-      if (data === null) {
-        return React.createElement('div', { className: 'dst-root' }, toolbar,
-          React.createElement('div', { className: 'dst-loading' },
-            React.createElement('div', null,
-              React.createElement('div', null, t('error')),
-              tree.error !== null ? React.createElement('div', { className: 'dst-error' }, tree.error) : null,
-              React.createElement('button', { type: 'button', className: 'dst-button', onClick: tree.reload }, t('retry')),
-            ),
-          ),
+    function ownerAtSeq(chain, seq) {
+      if (!Array.isArray(chain) || chain.length === 0 || !Number.isSafeInteger(seq)) return null
+      let ownerIndex = 0
+      for (let index = 1; index < chain.length; index += 1) {
+        const inherited = chain[index]?.inheritedEventCount
+        if (Number.isSafeInteger(inherited) && seq >= inherited) ownerIndex = index
+        else break
+      }
+      return { session: chain[ownerIndex], lane: ownerIndex }
+    }
+
+    function descendantBranches(data, currentId) {
+      const { byId, children } = familyChildren(data)
+      if (!byId.has(currentId)) return []
+      const baseDepth = Math.max(0, chainTo(data, currentId).length - 1)
+      const result = []
+      const visit = (parentId, depth, seen) => {
+        for (const childId of children.get(parentId) ?? []) {
+          if (seen.has(childId)) continue
+          const nextSeen = new Set(seen)
+          nextSeen.add(childId)
+          const session = byId.get(childId)
+          result.push({
+            sessionId: childId,
+            parentSessionId: parentId,
+            depth,
+            forkAtSeq: Number.isSafeInteger(session?.forkAtSeq) ? session.forkAtSeq : null,
+            events: Array.isArray(session?.events) ? session.events : [],
+          })
+          visit(childId, depth + 1, nextSeen)
+        }
+      }
+      visit(currentId, baseDepth + 1, new Set([currentId]))
+      return result
+    }
+
+    function decodeTrajectoryKey(row) {
+      const raw = row.getAttribute('data-trajectory-row-key')
+      if (typeof raw !== 'string') return ''
+      try { return decodeURIComponent(raw) } catch { return raw }
+    }
+
+    const ROLE_ICON = {
+      user: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"><circle cx="8" cy="5.2" r="2.5"/><path d="M3.4 13c.5-2.6 2.2-4 4.6-4s4.1 1.4 4.6 4"/></svg>',
+      assistant: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"><path d="M8 2.2c.4 3.1 2.7 5.4 5.8 5.8-3.1.4-5.4 2.7-5.8 5.8C7.6 10.7 5.3 8.4 2.2 8 5.3 7.6 7.6 5.3 8 2.2Z"/></svg>',
+      tool: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M13.7 3.4a3.5 3.5 0 0 1-4.4 4.4L4.4 12.7a1.5 1.5 0 1 1-2.1-2.1l4.9-4.9a3.5 3.5 0 0 1 4.4-4.4l-2.1 2.1 2.1 2.1 2.1-2.1Z"/></svg>',
+      'tool-result': '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"><path d="M4 2.4h5.2L12 5.2v8.4H4V2.4Z"/><path d="M9 2.6v3h3M6 8h4M6 10.5h4"/></svg>',
+      context: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"><circle cx="8" cy="8" r="5.8"/><path d="M8 7.2v4M8 4.8v.2"/></svg>',
+      'turn-end': '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="m3.6 8.2 2.9 2.9 6-6"/></svg>',
+      retry: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M13 5.4A5.4 5.4 0 1 0 13.2 10"/><path d="M13 2.7v3.1H9.9"/></svg>',
+      compaction: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="m2.5 2.5 3.7 3.7M3 6.2h3.2V3M13.5 2.5 9.8 6.2M13 6.2H9.8V3M2.5 13.5l3.7-3.7M3 9.8h3.2V13M13.5 13.5l-3.7-3.7M13 9.8H9.8V13"/></svg>',
+    }
+
+    function roleIcon(role) {
+      return ROLE_ICON[role] ?? ROLE_ICON.context
+    }
+
+    function ensureRowGraph(td, spec) {
+      const g = realGlobal()
+      if (g === null || g.document === undefined) return
+      let svg = td.querySelector(':scope > svg.dstg-rowGraph')
+      if (svg === null) {
+        svg = g.document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+        svg.setAttribute('class', 'dstg-rowGraph')
+        svg.setAttribute('aria-hidden', 'true')
+        td.prepend(svg)
+      }
+      const height = Math.max(1, spec.height)
+      const width = Math.max(1, spec.width)
+      svg.setAttribute('width', String(width))
+      svg.setAttribute('height', String(height))
+      svg.setAttribute('viewBox', `0 0 ${width} ${height}`)
+      svg.style.width = `${width}px`
+      svg.style.height = `${height}px`
+      while (svg.firstChild !== null) svg.removeChild(svg.firstChild)
+      const addPath = (d, lane) => {
+        const path = g.document.createElementNS('http://www.w3.org/2000/svg', 'path')
+        path.setAttribute('d', d)
+        path.setAttribute('stroke', laneColor(lane))
+        path.setAttribute('opacity', '0.66')
+        svg.appendChild(path)
+      }
+      const centerY = height / 2
+      const active = new Set(spec.activeLanes)
+      for (const lane of spec.activeLanes) {
+        const x = spec.baseX + lane * LANE_STEP
+        const endY = spec.endAtNode && lane === spec.lane ? centerY : height
+        addPath(`M${x} 0 L${x} ${endY}`, lane)
+      }
+      // Stop a parent lane at the fork point when it has no later row.
+      if (spec.forkFrom !== null && spec.forkFrom !== undefined && !active.has(spec.forkFrom)) {
+        const x = spec.baseX + spec.forkFrom * LANE_STEP
+        addPath(`M${x} 0 L${x} ${centerY}`, spec.forkFrom)
+      }
+      if (spec.forkFrom !== null && spec.forkFrom !== undefined) {
+        const fromX = spec.baseX + spec.forkFrom * LANE_STEP
+        const toX = spec.baseX + spec.lane * LANE_STEP
+        addPath(
+          `M${fromX} 0 C${fromX} ${centerY * 1.15} ${toX} ${centerY * 0.55} ${toX} ${centerY}`,
+          spec.forkFrom,
         )
       }
+    }
 
-      const groups = groupByTurn(selected?.events ?? [])
-      const inspector = selected === null
-        ? React.createElement('div', { className: 'dst-empty' }, t('empty'))
-        : React.createElement(React.Fragment, null,
-            React.createElement('div', { className: 'dst-detailHead' },
-              React.createElement('div', { style: { minWidth: 0 } },
-                React.createElement('div', { className: 'dst-detailTitle' }, sessionTitle(list, selected.sessionId)),
-                React.createElement('div', { className: 'dst-detailId' }, selected.sessionId),
-              ),
-              React.createElement('div', { className: 'dst-detailActions' },
-                React.createElement('button', {
-                  type: 'button',
-                  className: 'dst-button',
-                  disabled: busy || (selected.lastSeq ?? -1) < 0,
-                  onClick: forkLatest,
-                }, t('forkLatest')),
-                React.createElement('button', {
-                  type: 'button',
-                  className: 'dst-button',
-                  onClick: () => { void onOpen(selected) },
-                }, t('open')),
-              ),
-            ),
-            React.createElement('p', { className: 'dst-hint' }, t('forkHint')),
-            selected.error ? React.createElement('div', { className: 'dst-error' }, selected.error) : null,
-            selected.events.length === 0
-              ? React.createElement('div', { className: 'dst-empty' }, t('noEvents'))
-              : groups.map((group) => React.createElement('div', { key: group.turn === null ? 'none' : group.turn, className: 'dst-turnGroup' },
-                  group.turn !== null ? React.createElement('div', { className: 'dst-turnLabel' }, t('turn', { turn: group.turn })) : null,
-                  group.events.map((event) => React.createElement(EventRow, {
-                    key: `${event.type}-${event.seq}`,
-                    event,
-                    selectedSessionId: selected.sessionId,
-                    busy,
-                    editingSeq,
-                    draft,
-                    error,
-                    translate: t,
-                    onEdit: startEdit,
-                    onDraft: setDraft,
-                    onCancelEdit: () => { setEditingSeq(null); setError(null) },
-                    onSubmitEdit: submitEdit,
-                    onFork: forkAfter,
-                  })),
-                )),
-            React.createElement('div', { className: 'dst-exact' },
-              React.createElement('span', { className: 'dst-exactLabel' }, t('exactSeq')),
-              React.createElement('input', {
-                className: 'dst-input',
-                type: 'number',
-                min: 0,
-                max: Math.max(0, selected.lastSeq ?? 0),
-                placeholder: t('exactPlaceholder'),
-                value: exactSeq,
-                onChange: (event) => setExactSeq(event.target.value),
-              }),
-              React.createElement('button', {
-                type: 'button',
-                className: 'dst-button',
-                disabled: busy || exactSeq === '',
-                onClick: forkExact,
-              }, t('forkExact')),
-            ),
-          )
+    function applyNativeRowGraph(tr, spec) {
+      const td = tr.firstElementChild
+      if (td === null) return
+      const tag = tr.querySelector('[data-role-kind]')
+      if (tag === null) return
+      const height = tr.getBoundingClientRect().height || 30
+      const slot = tag.parentElement
+      if (slot !== null) slot.style.transform = `translateX(${-spec.maxLane * LANE_STEP}px)`
+      tag.style.setProperty('--dst-lane-offset', `${spec.lane * LANE_STEP}px`)
+      tag.style.setProperty('--dst-lane-color', laneColor(spec.lane))
+      tr.dataset.dstLane = String(spec.lane)
+      tr.dataset.dstLaneColor = laneColor(spec.lane)
+      tr.dataset.dstSession = spec.sessionId
+      tr.dataset.dstSeq = String(spec.seq)
+      const baseX = spec.eventColumnWidth - 5.5 - spec.maxLane * LANE_STEP
+      ensureRowGraph(td, {
+        width: spec.eventColumnWidth,
+        height,
+        baseX,
+        lane: spec.lane,
+        activeLanes: spec.activeLanes,
+        forkFrom: spec.forkFrom,
+        endAtNode: false,
+      })
+    }
 
-      return React.createElement('div', { className: 'dst-root' },
-        toolbar,
-        data.truncated ? React.createElement('div', { className: 'dst-error', style: { margin: '8px 16px 0' } }, t('truncated', { count: data.sessions.length })) : null,
-        React.createElement('div', { className: 'dst-body' },
-          React.createElement('div', { className: 'dst-pane' },
-            React.createElement('div', { className: 'dst-sectionLabel' }, t('branches')),
-            React.createElement('div', { className: 'dst-tree' },
-              rootId !== undefined
-                ? React.createElement(Branch, {
-                    id: rootId,
-                    byId: treeShape.byId,
-                    children: treeShape.children,
-                    currentId: sessionId,
-                    selectedId: selected?.sessionId ?? selectedId,
-                    path,
-                    list,
-                    onSelect: setSelectedId,
-                    onOpen,
-                    translate: t,
-                    seen: new Set(),
-                  })
-                : React.createElement('div', { className: 'dst-empty' }, t('empty')),
-            ),
-            error !== null ? React.createElement('div', { className: 'dst-error' }, error) : null,
-          ),
-          React.createElement('div', { className: 'dst-pane' },
-            React.createElement('div', { className: 'dst-sectionLabel' }, t('timeline')),
-            inspector,
-          ),
-        ),
-      )
+    function createSynthRow(doc, spec) {
+      const tr = doc.createElement('tr')
+      tr.className = 'dstg-synthRow'
+      tr.dataset.dstSynth = '1'
+      tr.dataset.dstSession = spec.sessionId
+      tr.dataset.dstSeq = String(spec.seq)
+      tr.dataset.dstLane = String(spec.lane)
+      tr.dataset.dstLaneColor = laneColor(spec.lane)
+      tr.dataset.dstLaneColor = laneColor(spec.lane)
+      tr.style.setProperty('--dst-lane-color', laneColor(spec.lane))
+      const eventTd = doc.createElement('td')
+      eventTd.className = 'dstg-synthEvent'
+      const contentTd = doc.createElement('td')
+      contentTd.className = 'dstg-synthContent'
+      const inner = doc.createElement('div')
+      inner.className = 'dstg-synthContent'
+      contentTd.appendChild(inner)
+
+      const baseX = spec.eventColumnWidth - 5.5 - spec.maxLane * LANE_STEP
+      const node = doc.createElement('span')
+      node.className = 'dstg-node'
+      node.style.left = `${baseX + spec.lane * LANE_STEP}px`
+      node.style.top = '15px'
+      node.style.setProperty('--dst-lane-color', laneColor(spec.lane))
+      node.innerHTML = roleIcon(spec.event.role)
+      eventTd.appendChild(node)
+      ensureRowGraph(eventTd, {
+        width: spec.eventColumnWidth,
+        height: 30,
+        baseX,
+        lane: spec.lane,
+        activeLanes: spec.activeLanes,
+        forkFrom: spec.forkFrom,
+        endAtNode: spec.branchEnd,
+      })
+
+      if (spec.branchStart) {
+        const chip = doc.createElement('span')
+        chip.className = 'dstg-branchChip'
+        chip.style.setProperty('--dst-lane-color', laneColor(spec.lane))
+        chip.textContent = spec.branchTitle
+        inner.appendChild(chip)
+        const note = doc.createElement('span')
+        note.className = 'dstg-forkNote'
+        note.textContent = spec.forkAtSeq === null ? '' : `#${spec.forkAtSeq}`
+        if (note.textContent !== '') inner.appendChild(note)
+      }
+      const role = doc.createElement('span')
+      role.className = 'dstg-synthRole'
+      role.textContent = t(`role.${spec.event.role}`)
+      const text = doc.createElement('span')
+      text.className = 'dstg-synthText'
+      text.textContent = spec.event.text === '' ? t('noEvents') : spec.event.text
+      text.title = spec.event.text
+      const seq = doc.createElement('span')
+      seq.className = 'dstg-synthSeq'
+      seq.textContent = `#${spec.seq}`
+      inner.append(role, text, seq)
+      tr.append(eventTd, contentTd)
+      return tr
+    }
+
+    /** Track whether the native Trajectory table is currently mounted. */
+    function useTrajectoryPresent() {
+      const [present, setPresent] = React.useState(false)
+      React.useEffect(() => {
+        const g = realGlobal()
+        if (g === null || g.document === undefined || g.document.body === null) return undefined
+        let frame = 0
+        let disposed = false
+        const check = () => {
+          frame = 0
+          if (disposed) return
+          setPresent(g.document.querySelector('[data-trajectory-scroll]') !== null)
+        }
+        const schedule = () => {
+          if (frame !== 0) return
+          frame = g.requestAnimationFrame(check)
+        }
+        const observer = new g.MutationObserver(schedule)
+        observer.observe(g.document.body, { childList: true, subtree: true })
+        check()
+        return () => {
+          disposed = true
+          observer.disconnect()
+          if (frame !== 0) g.cancelAnimationFrame(frame)
+        }
+      }, [])
+      return present
+    }
+
+    function TrajectoryGraphInjector(props) {
+      const sessionId = props.sessionId
+      const sessions = props.sessions
+      const list = useSessionList(sessions)
+      const trajectoryPresent = useTrajectoryPresent()
+      const tree = useTree(sessionId, trajectoryPresent)
+
+      React.useEffect(() => {
+        if (typeof sessionId !== 'string' || sessionId.length === 0) return undefined
+        const g = realGlobal()
+        if (g === null || g.document === undefined) return undefined
+        const doc = g.document
+        let frame = 0
+        let injecting = false
+        let disposed = false
+        let timer = 0
+
+        const clearGraph = () => {
+          doc.querySelectorAll('tr[data-dst-synth]').forEach((element) => element.remove())
+          doc.querySelectorAll('svg.dstg-rowGraph').forEach((element) => element.remove())
+          doc.querySelectorAll('[data-dst-lane]').forEach((element) => {
+            element.removeAttribute('data-dst-lane')
+            element.removeAttribute('data-dst-lane-color')
+            element.removeAttribute('data-dst-session')
+            element.removeAttribute('data-dst-seq')
+          })
+          doc.querySelectorAll('table[data-dst-graph=on] [data-role-kind]').forEach((element) => {
+            element.style.removeProperty('--dst-lane-offset')
+            element.style.removeProperty('--dst-lane-color')
+            if (element.parentElement !== null) element.parentElement.style.removeProperty('transform')
+          })
+          doc.querySelectorAll('table[data-dst-graph=on]').forEach((table) => {
+            table.removeAttribute('data-dst-graph')
+            const col = table.querySelector('colgroup > col:first-child')
+            if (col !== null) col.style.removeProperty('width')
+          })
+        }
+
+        const apply = () => {
+          frame = 0
+          if (disposed) return
+          const data = tree.data
+          if (data === null || data.sessions === undefined) return
+          const table = doc.querySelector('[data-trajectory-scroll] table')
+          if (table === null) return
+          const tbody = table.querySelector('tbody')
+          if (tbody === null) return
+          const byId = new Map(data.sessions.map((session) => [session.sessionId, session]))
+          const current = byId.get(sessionId)
+          if (current === undefined) return
+          const chain = chainTo(data, sessionId)
+          if (chain.length === 0) return
+          const descendants = descendantBranches(data, sessionId)
+          const maxLane = Math.max(chain.length - 1, ...descendants.map((branch) => branch.depth), 0)
+          const eventColumnWidth = 84 + maxLane * LANE_STEP
+          table.setAttribute('data-dst-graph', 'on')
+          const col = table.querySelector('colgroup > col:first-child')
+          if (col !== null) col.style.width = `${eventColumnWidth}px`
+
+          const eventIndex = current.eventIndex ?? {}
+          const firstSeqByLane = new Map()
+          const lastSeqByLane = new Map()
+          for (const info of Object.values(eventIndex)) {
+            if (!info || !Number.isSafeInteger(info.seq)) continue
+            const owner = ownerAtSeq(chain, info.seq)
+            if (owner === null) continue
+            const previousFirst = firstSeqByLane.get(owner.lane)
+            if (previousFirst === undefined || info.seq < previousFirst) firstSeqByLane.set(owner.lane, info.seq)
+            const previousLast = lastSeqByLane.get(owner.lane)
+            if (previousLast === undefined || info.seq > previousLast) lastSeqByLane.set(owner.lane, info.seq)
+          }
+          const nativeActiveLanes = (lane, seq) => {
+            const lanes = []
+            for (let index = 0; index <= lane; index += 1) {
+              if (index === lane || (lastSeqByLane.get(index) ?? -1) > seq) lanes.push(index)
+            }
+            return lanes
+          }
+
+          const renderedNative = new Set()
+          for (const tr of tbody.querySelectorAll('tr[data-trajectory-row-key]')) {
+            if (tr.hasAttribute('data-dst-synth')) continue
+            const key = decodeTrajectoryKey(tr)
+            const info = eventIndex[key]
+            if (info === undefined) continue
+            const owner = ownerAtSeq(chain, info.seq)
+            if (owner === null) continue
+            const lane = owner.lane
+            const forkFrom = lane > 0 && firstSeqByLane.get(lane) === info.seq ? lane - 1 : null
+            applyNativeRowGraph(tr, {
+              eventColumnWidth,
+              maxLane,
+              lane,
+              activeLanes: nativeActiveLanes(lane, info.seq),
+              forkFrom,
+              sessionId: owner.session.sessionId,
+              seq: info.seq,
+            })
+            renderedNative.add(tr)
+          }
+
+          const clearSynth = () => {
+            tbody.querySelectorAll('tr[data-dst-synth]').forEach((element) => element.remove())
+          }
+          clearSynth()
+
+          const children = new Map()
+          for (const branch of descendants) {
+            const bucket = children.get(branch.parentSessionId)
+            if (bucket === undefined) children.set(branch.parentSessionId, [branch])
+            else bucket.push(branch)
+          }
+          const visibleRows = () => [...tbody.querySelectorAll('tr[data-dst-session]')]
+            .map((row) => ({
+              row,
+              sessionId: row.getAttribute('data-dst-session'),
+              seq: Number(row.getAttribute('data-dst-seq')),
+            }))
+            .filter((row) => typeof row.sessionId === 'string' && Number.isSafeInteger(row.seq))
+
+          const findAnchor = (parentSessionId, forkAtSeq) => {
+            const rows = visibleRows().filter((row) => row.sessionId === parentSessionId)
+            let best = null
+            let bestSeq = -1
+            for (const row of rows) {
+              if (Number.isSafeInteger(forkAtSeq) && row.seq > forkAtSeq) continue
+              if (row.seq >= bestSeq) {
+                bestSeq = row.seq
+                best = row.row
+              }
+            }
+            return best
+          }
+
+          const insertBranch = (branch, insertionRow) => {
+            // A branch is only drawn when its fork anchor is currently in the
+            // virtualized window. Guessing a top-of-table position would put
+            // the branch at the wrong point in the timeline.
+            if (insertionRow === null || insertionRow.parentNode === null) return null
+            let cursor = insertionRow
+            const anchorSeq = Number(insertionRow.getAttribute('data-dst-seq'))
+            const parentHasLater = visibleRows().some((row) =>
+              row.sessionId === branch.parentSessionId
+              && Number.isSafeInteger(row.seq)
+              && row.seq > (Number.isSafeInteger(anchorSeq) ? anchorSeq : -1))
+            const events = branch.events.length > 0
+              ? branch.events
+              : [{ seq: branch.forkAtSeq ?? 0, role: 'context', text: '', turn: null }]
+            const fragment = doc.createDocumentFragment()
+            let lastRow = null
+            for (const [index, event] of events.entries()) {
+              const row = createSynthRow(doc, {
+                eventColumnWidth,
+                maxLane,
+                lane: branch.depth,
+                activeLanes: parentHasLater
+                  ? Array.from({ length: branch.depth + 1 }, (_, lane) => lane)
+                  : [branch.depth],
+                forkFrom: index === 0 && branch.depth > 0 ? branch.depth - 1 : null,
+                branchStart: index === 0,
+                branchEnd: index === events.length - 1,
+                branchTitle: sessionTitle(list, branch.sessionId),
+                forkAtSeq: branch.forkAtSeq,
+                sessionId: branch.sessionId,
+                seq: Number.isSafeInteger(event.seq) ? event.seq : 0,
+                event,
+              })
+              fragment.appendChild(row)
+              lastRow = row
+            }
+            cursor.after(fragment)
+            const branchRows = [...tbody.querySelectorAll(`tr[data-dst-synth][data-dst-session="${CSS.escape(branch.sessionId)}"]`)]
+            const ownLast = branchRows.at(-1) ?? lastRow
+            let siblingCursor = ownLast
+            let siblingAnchor = null
+            for (const child of children.get(branch.sessionId) ?? []) {
+              const anchor = findAnchor(branch.sessionId, child.forkAtSeq)
+              const effectiveAnchor = anchor !== null && anchor === siblingAnchor && siblingCursor?.parentNode !== null
+                ? siblingCursor
+                : anchor
+              const inserted = insertBranch(child, effectiveAnchor)
+              if (inserted !== null) {
+                siblingAnchor = anchor
+                siblingCursor = inserted
+              }
+            }
+            return siblingCursor ?? ownLast
+          }
+
+          let siblingCursor = null
+          let siblingAnchor = null
+          for (const branch of children.get(sessionId) ?? []) {
+            const anchor = findAnchor(sessionId, branch.forkAtSeq)
+            const effectiveAnchor = anchor !== null && anchor === siblingAnchor && siblingCursor?.parentNode !== null
+              ? siblingCursor
+              : anchor
+            const inserted = insertBranch(branch, effectiveAnchor)
+            if (inserted !== null) {
+              siblingAnchor = anchor
+              siblingCursor = inserted
+            }
+          }
+        }
+
+        const schedule = () => {
+          if (frame !== 0 || disposed) return
+          frame = g.requestAnimationFrame(() => {
+            frame = 0
+            if (disposed) return
+            injecting = true
+            try { apply() } catch (error) { console.warn('[dsh-session-tree] graph injection failed', error) }
+            clearTimeout(timer)
+            timer = g.setTimeout(() => { injecting = false }, 0)
+          })
+        }
+
+        const observer = new g.MutationObserver(() => {
+          if (injecting) return
+          schedule()
+        })
+        observer.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-trajectory-row-key'] })
+        schedule()
+        return () => {
+          disposed = true
+          observer.disconnect()
+          if (frame !== 0) g.cancelAnimationFrame(frame)
+          clearTimeout(timer)
+          clearGraph()
+        }
+      }, [list, sessionId, tree.data])
+
+      return null
     }
 
     /** Parse the durable seq prefix the Chat seat puts on every flow row. */
@@ -999,30 +968,32 @@ window.__ModuleLoader__.load({
 
       const injectTreeProps = () => ({ sessions, uiWorkspace })
 
-      slots.inject('conversation.view', () => slots.register(
-        { name: 'conversation.view', id: 'session-tree', order: 30, label: () => t('tab'), inject: injectTreeProps },
-        TreeView,
-      ))
+      // There is intentionally no `conversation.view` registration: Session
+      // lineage is drawn inside the native Trajectory ledger instead of a
+      // separate Tree View tab.
 
-      // Null-rendering observer mounted in the session header: it only augments
-      // the Host's own user action row and never replaces a Chat renderer.
+      // Null-rendering observers mounted in the session header: one augments
+      // the Host's own user action row, the other draws the inline graph.
       try {
         slots.inject('conversation.session.header.actions', () => slots.register(
           { name: 'conversation.session.header.actions', id: 'session-tree-user-actions', order: 900, inject: injectTreeProps },
           UserActionInjector,
         ))
       } catch (error) {
-        console.warn('[dsh-session-tree] could not mount the user action injector; tree view is still available', error)
+        console.warn('[dsh-session-tree] could not mount the user action injector', error)
+      }
+      try {
+        slots.inject('conversation.session.header.actions', () => slots.register(
+          { name: 'conversation.session.header.actions', id: 'session-tree-trajectory-graph', order: 901, inject: injectTreeProps },
+          TrajectoryGraphInjector,
+        ))
+      } catch (error) {
+        console.warn('[dsh-session-tree] could not mount the Trajectory graph injector', error)
       }
     }
 
     exports.__test = {
-      textFromContent,
-      imageParts,
-      groupByTurn,
-      buildChildren,
-      countPath,
-      TreeView,
+      TrajectoryGraphInjector,
       UserActionInjector,
       seqFromNodeKey,
       messageTextFromRow,
