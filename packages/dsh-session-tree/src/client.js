@@ -155,8 +155,10 @@ window.__ModuleLoader__.load({
       '.dstt-branchChip::before{content:"";width:4px;height:4px;border-radius:50%;background:var(--dstt-lane-color,var(--dsw-alias-state-business-primary));flex:none}',
       '.dstt-forkNote{flex:none;color:var(--dsw-alias-label-tertiary);font-size:9px;font-variant-numeric:tabular-nums}',
       '.dstt-hiddenNote{flex:none;margin-left:auto;color:var(--dsw-alias-label-tertiary);font-size:9.5px}',
-      '.dstt-turn{display:flex;align-items:center;gap:8px;height:29px;padding:0 10px;color:var(--dsw-alias-label-tertiary);font-size:9.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;background:linear-gradient(90deg,color-mix(in srgb,var(--dsw-alias-label-tertiary) 7%,transparent),transparent)}',
-      '.dstt-turn::after{content:"";flex:1;height:1px;background:var(--dsw-alias-border-l1)}',
+      '.dstt-turnRow{height:29px;background:linear-gradient(90deg,color-mix(in srgb,var(--dsw-alias-label-tertiary) 5%,transparent),transparent)}',
+      '.dstt-turnGraphCell{position:relative;display:flex;align-items:center;min-width:0;overflow:hidden}',
+      '.dstt-turnLabel{display:flex;align-items:center;gap:8px;min-width:0;padding:0 8px;color:var(--dsw-alias-label-tertiary);font-size:9.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}',
+      '.dstt-turnLabel::after{content:"";flex:1;height:1px;background:var(--dsw-alias-border-l1)}',
       '.dstt-empty{display:flex;align-items:center;justify-content:center;height:100%;padding:24px;color:var(--dsw-alias-label-tertiary);font-size:12px;text-align:center}',
       '.dstt-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:1300;max-width:min(620px,calc(100vw - 32px));box-sizing:border-box;border-radius:10px;padding:9px 13px;background:var(--dsw-alias-bg-layer-1,var(--dsw-alias-bg-primary));box-shadow:var(--dsw-elevation-prominent,0 10px 30px rgba(0,0,0,.24));color:var(--dsw-alias-label-primary);font-size:12px;line-height:18px}',
     ].join('')
@@ -478,7 +480,7 @@ window.__ModuleLoader__.load({
        * "original mainline" side branch, even though it remains the parent in
        * DSH's persistent Session graph.
        */
-      const buildMainline = (sessionId) => {
+      const buildMainline = (sessionId, inheritedAnchorRow = null) => {
         const events = eventsFor(sessionId)
         const pathChildId = pathNext.get(sessionId)
         if (pathChildId === undefined) {
@@ -501,7 +503,11 @@ window.__ModuleLoader__.load({
           branchTitle: sessionTitle(list, sessionId),
           forkAnchorRow: index === 0 ? undefined : undefined,
         }))
-        const anchorRow = mainlineRows.at(-1) ?? null
+        // The fork boundary can sit in an inherited prefix that this Session
+        // does not display (a nested fork); then its first visible row is a
+        // continuation and the edge must start from the ancestor row already
+        // rendered on the trunk.
+        const anchorRow = mainlineRows.at(-1) ?? inheritedAnchorRow
         const childrenList = childrenOf(sessionId)
         const sideChildren = childrenList.filter((childId) => childId !== pathChildId)
 
@@ -528,7 +534,7 @@ window.__ModuleLoader__.load({
         }
 
         // The selected path continues in lane 0 without a branch edge.
-        output.push(...buildMainline(pathChildId))
+        output.push(...buildMainline(pathChildId, anchorRow))
 
         // Siblings that fork at the same event as the selected path share the
         // same parent node; they are rendered after the path so the trunk wins.
@@ -537,7 +543,7 @@ window.__ModuleLoader__.load({
           const child = byId.get(childId)
           const childAnchor = findAnchorIndex(sessionId, child?.forkAtSeq)
           const effectiveAnchor = childAnchor < 0 ? 0 : childAnchor
-          if (effectiveAnchor !== mainlineEnd) continue
+          if (effectiveAnchor !== mainlineEnd && childAnchor >= 0) continue
           handled.add(childId)
           const childLane = allocateLane()
           const childRows = buildSide(childId, childLane, {
@@ -572,7 +578,21 @@ window.__ModuleLoader__.load({
         return output
       }
 
-      const eventRows = buildMainline(rootId)
+      const eventRows = buildMainline(rootId, null)
+
+      // Every fork must leave a visible parent node. Nested forks whose exact
+      // boundary lives in an inherited prefix have no row of their own there,
+      // so anchor them to the nearest already-rendered row on the parent lane.
+      // This keeps one single edge treatment for all branches.
+      const lastRowByLane = new Map()
+      for (const row of eventRows) {
+        if (row.kind !== 'event') continue
+        if (row.branchStart && (row.forkAnchorRow === undefined || row.forkAnchorRow === null)) {
+          const fallback = Number.isSafeInteger(row.parentLane) ? lastRowByLane.get(row.parentLane) : undefined
+          if (fallback !== undefined) row.forkAnchorRow = fallback
+        }
+        lastRowByLane.set(row.lane, row)
+      }
 
       // Turn separators belong to the selected mainline lane only; side lanes
       // are interleaved and should not break its reading flow.
@@ -586,7 +606,7 @@ window.__ModuleLoader__.load({
           && typeof row.event?.turn === 'number'
           && row.event.turn !== previousTurn) {
           lastTurnBySession.set(row.sessionId, row.event.turn)
-          decorated.push({ kind: 'turn', turn: row.event.turn, sessionId: row.sessionId })
+          decorated.push({ kind: 'turn', turn: row.event.turn, sessionId: row.sessionId, rowPosition: decorated.length })
         }
         const decoratedRow = { ...row, rowPosition: decorated.length }
         decoratedByOriginal.set(row, decoratedRow)
@@ -605,7 +625,7 @@ window.__ModuleLoader__.load({
         if (anchorIndex === undefined || childIndex <= anchorIndex) continue
         for (let index = anchorIndex; index <= childIndex; index += 1) {
           const target = decorated[index]
-          if (target.kind !== 'event') continue
+          if (target === undefined) continue
           const edges = target.pendingBranchEdges ?? []
           edges.push({
             parentLane: row.parentLane,
@@ -624,7 +644,7 @@ window.__ModuleLoader__.load({
         lastByLane.set(row.lane, index)
       })
       for (const row of decorated) {
-        if (row.kind !== 'event') continue
+        if (row.rowPosition === undefined) continue
         row.activeLanes = [...firstByLane.entries()]
           .filter(([lane]) => row.rowPosition >= firstByLane.get(lane) && row.rowPosition <= lastByLane.get(lane))
           .map(([lane]) => lane)
@@ -639,13 +659,10 @@ window.__ModuleLoader__.load({
       }
     }
 
-    function TreeGraph({ row, maxLane, firstByLane, lastByLane, onToggle }) {
-      const width = (maxLane + 1) * 20 + 8
+    function treeLanePaths(row, maxLane, firstByLane, lastByLane) {
       const xFor = (lane) => 10 + lane * 20
-      const color = treeLaneColor(row.lane)
-      const x = xFor(row.lane)
       const paths = []
-      for (const lane of row.activeLanes) {
+      for (const lane of row.activeLanes ?? []) {
         const laneX = xFor(lane)
         let start = 0
         let end = 30
@@ -671,22 +688,33 @@ window.__ModuleLoader__.load({
           paths.push({ d: `M${childX} 0 L${childX} 15`, color: treeLaneColor(edge.lane) })
         }
       }
-      if (row.branchStart && Number.isSafeInteger(row.parentLane) && !(row.pendingBranchEdges ?? []).some((edge) => edge.phase === 'curve')) {
-        const parentX = xFor(row.parentLane)
-        paths.push({
-          d: `M${parentX} 0 L${parentX} 13 Q${parentX} 16 ${parentX + 3} 16 L${x} 16 L${x} 15`,
-          color,
-        })
-      }
-      return React.createElement('span', { className: 'dstt-graph', style: { width: `${width}px` } },
-        React.createElement('svg', { width, height: 30, viewBox: `0 0 ${width} 30`, 'aria-hidden': true },
-          paths.map((path, index) => React.createElement('path', {
-            key: index,
-            className: 'dstt-lane',
-            d: path.d,
-            stroke: path.color,
-          })),
-        ),
+      return paths
+    }
+
+    function TreeLanes({ row, maxLane, firstByLane, lastByLane }) {
+      const width = (maxLane + 1) * 20 + 8
+      const paths = treeLanePaths(row, maxLane, firstByLane, lastByLane)
+      return React.createElement('svg', {
+        width,
+        height: 30,
+        viewBox: `0 0 ${width} 30`,
+        'aria-hidden': true,
+      },
+        paths.map((path, index) => React.createElement('path', {
+          key: index,
+          className: 'dstt-lane',
+          d: path.d,
+          stroke: path.color,
+        })),
+      )
+    }
+
+    function TreeGraph({ row, maxLane, firstByLane, lastByLane, onToggle }) {
+      const xFor = (lane) => 10 + lane * 20
+      const color = treeLaneColor(row.lane)
+      const x = xFor(row.lane)
+      return React.createElement('span', { className: 'dstt-graph', style: { width: `${(maxLane + 1) * 20 + 8}px` } },
+        React.createElement(TreeLanes, { row, maxLane, firstByLane, lastByLane }),
         React.createElement(row.collapsible ? 'button' : 'span', {
           type: row.collapsible ? 'button' : undefined,
           className: 'dstt-node',
@@ -702,6 +730,18 @@ window.__ModuleLoader__.load({
             }
             : undefined,
         }, row.collapsible ? (row.collapsed ? '+' : '−') : null),
+      )
+    }
+
+    function TreeTurnRow({ row, maxLane, firstByLane, lastByLane }) {
+      return React.createElement('div', { className: 'dstt-row dstt-turnRow' },
+        React.createElement('div', { className: 'dstt-turnGraphCell' },
+          React.createElement('span', {
+            className: 'dstt-graph',
+            style: { width: `${(maxLane + 1) * 20 + 8}px` },
+          }, React.createElement(TreeLanes, { row, maxLane, firstByLane, lastByLane })),
+        ),
+        React.createElement('div', { className: 'dstt-turnLabel' }, t('turn', { turn: row.turn })),
       )
     }
 
@@ -803,7 +843,13 @@ window.__ModuleLoader__.load({
           projection.rows.length === 0
             ? React.createElement('div', { className: 'dstt-empty' }, t('empty'))
             : projection.rows.map((row, index) => row.kind === 'turn'
-                ? React.createElement('div', { key: `turn-${row.turn}-${index}`, className: 'dstt-turn' }, t('turn', { turn: row.turn }))
+                ? React.createElement(TreeTurnRow, {
+                    key: `turn-${row.turn}-${index}`,
+                    row,
+                    maxLane: projection.maxLane,
+                    firstByLane: projection.firstByLane,
+                    lastByLane: projection.lastByLane,
+                  })
                 : React.createElement(TreeRow, {
                     key: `${row.sessionId}-${row.event.seq}-${index}`,
                     row,

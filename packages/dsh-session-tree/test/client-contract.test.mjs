@@ -49,7 +49,7 @@ test('the selected Session path is projected as the mainline trunk', () => {
   assert.match(source, /function projectTree/)
   assert.match(source, /const path = chainTo\(data, currentId\)/)
   assert.match(source, /const rootId = path\[0\]\?\.sessionId \?\? currentId/)
-  assert.match(source, /const buildMainline = \(sessionId\) =>/)
+  assert.match(source, /const buildMainline = \(sessionId, inheritedAnchorRow = null\) =>/)
   assert.match(source, /function treeVisibleEvents/)
   assert.match(source, /branchCount: byId\.size/)
   assert.match(source, /activeLanes/)
@@ -58,7 +58,8 @@ test('the selected Session path is projected as the mainline trunk', () => {
 test('branch rows reuse native Trajectory visual vocabulary', () => {
   assert.match(source, /className: 'dstt-kindTag'/)
   assert.match(source, /className: 'dstt-branchChip'/)
-  assert.match(source, /className: 'dstt-turn'/)
+  assert.match(source, /function TreeTurnRow/)
+  assert.match(source, /dstt-turnRow/)
   assert.match(source, /className: 'dstt-lane'/)
   assert.match(source, /className: 'dstt-node'/)
   assert.match(source, /data-toggle/)
@@ -99,4 +100,17 @@ test('the conversation tab is now labelled 轨迹树 / Trajectory Tree', () => {
   assert.match(source, /tab: 'Trajectory Tree'/)
   assert.equal(source.includes("tab: 'Tree'"), false)
   assert.equal(source.includes("tab: '树视图'"), false)
+})
+
+
+test('every fork uses one anchor-based edge treatment', () => {
+  assert.match(source, /const lastRowByLane = new Map\(\)/)
+  assert.match(source, /row\.forkAnchorRow = fallback/)
+  assert.equal(source.includes("if (row.branchStart && Number.isSafeInteger(row.parentLane) && !(row.pendingBranchEdges"), false)
+})
+
+test('turn separator rows keep the tree lanes continuous', () => {
+  assert.match(source, /function TreeTurnRow/)
+  assert.match(source, /rowPosition: decorated\.length/)
+  assert.match(source, /TreeLanes/)
 })
