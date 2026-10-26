@@ -22,7 +22,9 @@
  * accepting any family stack the user types.
  */
 import { execFile } from 'node:child_process'
+import { readFile, stat } from 'node:fs/promises'
 import { promisify } from 'node:util'
+import { brotliCompressSync, constants, gzipSync } from 'node:zlib'
 
 /** Promise face of execFile; the callback form cannot be awaited. */
 const execFileAsync = promisify(execFile)
@@ -30,8 +32,19 @@ const execFileAsync = promisify(execFile)
 export const name = 'sidebar-terminal-enhance'
 export const inject = ['webServer']
 
-/** Same-origin endpoint owned by this package. */
+/** Same-origin endpoint owned by this package: the family catalog. */
 export const FONT_LIST_PATH = '/sidebar-terminal-enhance/fonts'
+/**
+ * Same-origin prefix that streams one installed face to the browser, so a
+ * remote browser can use a Host font without installing it locally:
+ *
+ *   GET /sidebar-terminal-enhance/font/<family>/<style>.ttf
+ *
+ * `style` is one of `regular`, `bold`, `italic`, `bolditalic`. The prefix
+ * carries no trailing slash because {@link WebServer.match} matches
+ * `<prefix>` and `<prefix>/…`, not `<prefix/>…`.
+ */
+export const FONT_FILE_PREFIX = '/sidebar-terminal-enhance/font'
 
 /** How long one enumeration is reused before the route shells out again. */
 const CACHE_TTL_MS = 10 * 60 * 1000
@@ -39,6 +52,17 @@ const CACHE_TTL_MS = 10 * 60 * 1000
 const COMMAND_TIMEOUT_MS = 15_000
 /** Upper bound on families returned to the browser. */
 const MAX_FONTS = 5_000
+/** Longest family name accepted on the font-file route. */
+const MAX_FAMILY_LENGTH = 200
+/** Compressed-byte budget for the in-memory face cache. */
+const FACE_CACHE_BYTES = 48 * 1024 * 1024
+/** Fontconfig style names for the four faces the browser may request. */
+const FACE_STYLES = Object.freeze({
+  regular: 'Regular',
+  bold: 'Bold',
+  italic: 'Italic',
+  bolditalic: 'Bold Italic',
+})
 
 const FONT_NAME_MONO = /(?:^|[\s._-])(mono|monospace|code|console|fixed|courier|terminal)(?:$|[\s._-])/iu
 
@@ -216,6 +240,191 @@ export function resetFontCache() {
 }
 
 /**
+ * Resolve one installed face with fontconfig.
+ *
+ * The family the caller asked for must appear in the family list `fc-match`
+ * answers with, otherwise the match is a silent substitution (`fc-match
+ * "No Such Font"` happily answers Noto Sans) and serving it would put the
+ * wrong typeface behind the requested name.
+ *
+ * @param {string} family - requested family name.
+ * @param {string} style - one of the {@link FACE_STYLES} keys.
+ * @param {{run?: Function}} [options] - command runner for tests.
+ * @returns {Promise<{file: string, family: string, style: string}>} resolved face.
+ */
+export async function resolveFace(family, style, options = {}) {
+  const run = options.run ?? execFileAsync
+  const fontconfigStyle = FACE_STYLES[style]
+  if (fontconfigStyle === undefined) throw new Error(`unknown style "${style}"`)
+  const { stdout } = await run('fc-match', ['-f', '%{file}\n%{family}\n%{style}\n', `${family}:style=${fontconfigStyle}`], {
+    timeout: COMMAND_TIMEOUT_MS,
+    maxBuffer: 1024 * 1024,
+    windowsHide: true,
+  })
+  const [file = '', families = '', matchedStyle = ''] = String(stdout).split('\n')
+  if (file.trim() === '') throw new Error(`no font file for "${family}"`)
+  const wanted = family.trim().toLowerCase()
+  const names = families.split(',').map((name) => name.trim().toLowerCase()).filter(Boolean)
+  if (!names.includes(wanted)) {
+    throw new Error(`"${family}" is not installed (fontconfig matched "${families.trim()}")`)
+  }
+  return { file: file.trim(), family: families.trim(), style: matchedStyle.trim() }
+}
+
+/** @param {string} value - family name from the URL. @returns {string} the decoded family. */
+export function decodeFamilySegment(value) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    throw new Error('malformed family name')
+  }
+}
+
+/**
+ * Split the tail of a font-file URL into its family and style.
+ * @param {string} tail - everything after `<prefix>/`.
+ * @returns {{family: string, style: string}} requested face.
+ */
+export function parseFaceRequest(tail) {
+  const slash = tail.lastIndexOf('/')
+  if (slash <= 0) throw new Error('expected <family>/<style>.ttf')
+  const family = decodeFamilySegment(tail.slice(0, slash)).trim()
+  const file = decodeFamilySegment(tail.slice(slash + 1))
+  const style = file.replace(/\.ttf$/iu, '')
+  if (family === '' || family.length > MAX_FAMILY_LENGTH) throw new Error('invalid family name')
+  // A family name is a fontconfig pattern, never a path: rejecting separators
+  // and control characters keeps the decoded segment from reading as a file.
+  if (/[\\/\u0000-\u001f\u007f]/u.test(family)) throw new Error('invalid family name')
+  if (FACE_STYLES[style] === undefined) throw new Error('expected <family>/<style>.ttf')
+  return { family, style }
+}
+
+/** Compressed faces, keyed by `<encoding>|<file>|<mtimeMs>|<size>`, in LRU order. */
+const faceCache = new Map()
+let faceCacheBytes = 0
+
+/** Reset the streaming face cache (tests). */
+export function resetFaceCache() {
+  faceCache.clear()
+  faceCacheBytes = 0
+}
+
+/**
+ * Read, compress and cache one face. The key carries the file's mtime and size,
+ * so an upgraded font is re-read instead of served from a stale entry.
+ *
+ * Brotli keeps the same face at roughly two thirds of gzip's size and both are
+ * computed once per file revision, so the first request pays the compression
+ * and every later request is a cached buffer write.
+ *
+ * @param {string} file - absolute font path from fontconfig.
+ * @param {'br'|'gzip'} [encoding] - transfer encoding to prepare.
+ * @returns {Promise<{body: Buffer, etag: string, encoding: 'br'|'gzip'}>} compressed face and validator.
+ */
+export async function loadFace(file, encoding = 'br') {
+  const info = await stat(file)
+  if (info.isFile() !== true) throw new Error(`not a font file: ${file}`)
+  const etag = `"${info.size.toString(16)}-${Math.floor(info.mtimeMs).toString(16)}"`
+  const key = `${encoding}|${file}|${info.mtimeMs}|${info.size}`
+  const hit = faceCache.get(key)
+  if (hit !== undefined) {
+    faceCache.delete(key)
+    faceCache.set(key, hit)
+    return { body: hit.body, etag: hit.etag, encoding }
+  }
+  const raw = await readFile(file)
+  const body = encoding === 'br'
+    ? brotliCompressSync(raw, { params: {
+        [constants.BROTLI_PARAM_QUALITY]: 5,
+        [constants.BROTLI_PARAM_SIZE_HINT]: raw.length,
+      } })
+    : gzipSync(raw, { level: 6 })
+  faceCache.set(key, { body, etag })
+  faceCacheBytes += body.length
+  for (const [oldKey, value] of faceCache) {
+    if (faceCacheBytes <= FACE_CACHE_BYTES) break
+    faceCache.delete(oldKey)
+    faceCacheBytes -= value.body.length
+  }
+  return { body, etag, encoding }
+}
+
+/**
+ * Report whether this Host can stream faces to the browser at all. The browser
+ * half uses it to decide whether to publish `@font-face` rules.
+ * @param {{run?: Function}} [options] - command runner for tests.
+ * @returns {Promise<{supported: boolean, reason?: string, styles: string[]}>} capability.
+ */
+export async function streamingSupport(options = {}) {
+  const run = options.run ?? execFileAsync
+  try {
+    const { stdout } = await run('fc-match', ['-f', '%{file}', 'monospace'], {
+      timeout: COMMAND_TIMEOUT_MS,
+      maxBuffer: 1024 * 1024,
+      windowsHide: true,
+    })
+    if (String(stdout).trim() === '') return { supported: false, reason: 'fontconfig returned no file', styles: [] }
+    return { supported: true, styles: Object.keys(FACE_STYLES) }
+  } catch (error) {
+    return {
+      supported: false,
+      reason: `fontconfig is unavailable: ${error instanceof Error ? error.message : String(error)}`,
+      styles: [],
+    }
+  }
+}
+
+/**
+ * Answer one font-file request by streaming the resolved face, gzip-encoded
+ * inside the response. `Cache-Control: no-transform` keeps the webserver's
+ * compression middleware from encoding it a second time.
+ * @param {import('node:http').IncomingMessage} request - node request.
+ * @param {import('node:http').ServerResponse} response - node response.
+ * @param {string} tail - URL tail after `<prefix>/`.
+ * @returns {Promise<void>} resolves after the response ends.
+ */
+async function handleFace(request, response, tail) {
+  try {
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      response.writeHead(405, { allow: 'GET, HEAD' })
+      response.end()
+      return
+    }
+    const { family, style } = parseFaceRequest(tail)
+    const face = await resolveFace(family, style)
+    const accepted = String(request.headers?.['accept-encoding'] ?? '')
+    const encoding = /(?:^|,)\s*br(?:\s*;|,|$)/u.test(accepted) ? 'br' : 'gzip'
+    const { body, etag } = await loadFace(face.file, encoding)
+    const headers = {
+      'content-type': 'font/ttf',
+      'content-encoding': encoding,
+      'cache-control': 'public, max-age=86400, no-transform',
+      etag,
+      'content-length': String(body.length),
+      'x-dsh-font-family': face.family,
+    }
+    if (request.headers?.['if-none-match'] === etag) {
+      delete headers['content-encoding']
+      delete headers['content-length']
+      response.writeHead(304, headers)
+      response.end()
+      return
+    }
+    response.writeHead(200, headers)
+    if (request.method === 'HEAD') response.end()
+    else response.end(body)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    const status = /unknown style|expected <family>|invalid family|malformed family/u.test(message) ? 400 : 404
+    response.writeHead(status, {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store',
+    })
+    response.end(JSON.stringify({ ok: false, error: message }))
+  }
+}
+
+/**
  * Answer one font-catalog request.
  * @param {import('node:http').IncomingMessage} request - node request.
  * @param {import('node:http').ServerResponse} response - node response.
@@ -236,7 +445,8 @@ async function handleFonts(request, response) {
     }
     const url = new URL(request.url ?? FONT_LIST_PATH, 'http://sidebar-terminal-enhance.local')
     const catalog = await fontCatalog({ refresh: url.searchParams.get('refresh') === '1' })
-    json(200, { ok: true, ...catalog })
+    const streaming = await streamingSupport()
+    json(200, { ok: true, ...catalog, streaming })
   } catch (error) {
     json(500, { ok: false, error: error instanceof Error ? error.message : String(error) })
   }
@@ -252,10 +462,26 @@ export function apply(ctx) {
     path: FONT_LIST_PATH,
     handler: (request, response) => handleFonts(request, response),
   }), 'sidebar-terminal-enhance: font catalog route')
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'prefix',
+    path: FONT_FILE_PREFIX,
+    handler: (request, response) => {
+      const pathname = new URL(request.url ?? '/', 'http://sidebar-terminal-enhance.local').pathname
+      const tail = pathname.slice(FONT_FILE_PREFIX.length + 1)
+      return handleFace(request, response, tail)
+    },
+  }), 'sidebar-terminal-enhance: font face route')
 }
 
 export const __test = {
+  FONT_FILE_PREFIX,
   FONT_LIST_PATH,
+  decodeFamilySegment,
+  loadFace,
+  parseFaceRequest,
+  resetFaceCache,
+  resolveFace,
+  streamingSupport,
   mergeFonts,
   parseFamilyLines,
   parseFontconfig,

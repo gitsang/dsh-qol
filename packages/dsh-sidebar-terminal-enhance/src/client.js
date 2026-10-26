@@ -51,6 +51,7 @@ window.__ModuleLoader__.load({
     const FOREGROUND_VAR = '--dsh-terminal-color-foreground'
     const REVISION_VAR = '--dsh-terminal-color-revision'
     const FONT_LIST_ROUTE = '/sidebar-terminal-enhance/fonts'
+    const FONT_FILE_ROUTE = '/sidebar-terminal-enhance/font/'
     const PLUGIN_ID = '@gitsang/dsh-sidebar-terminal-enhance'
     const CSS_ID = `${PLUGIN_ID}/SidebarTerminalEnhance.css`
 
@@ -74,6 +75,7 @@ window.__ModuleLoader__.load({
       familyHint: '字体必须安装在浏览器所在的电脑上；族名不等于文件名。留空表示沿用 DSH 默认值。',
       familyStackHint: '下拉列表来自宿主机；可输入逗号分隔的回退列表，例如 “JetBrainsMono Nerd Font Mono, monospace”。',
       familyAria: '终端字体族',
+      streamHint: '宿主机上的字体会按需通过本服务下载到浏览器：没装字体的远程电脑也能直接使用，无需在本地安装。',
       catalogLoading: '正在读取宿主机字体…',
       catalogReady: '宿主机共 {count} 个字体族，其中 {mono} 个等宽。',
       catalogError: '无法读取宿主机字体：{error}',
@@ -115,6 +117,7 @@ window.__ModuleLoader__.load({
       familyHint: 'The font must be installed on the machine running the browser; the family name is not the file name. Leave empty to keep the DSH default.',
       familyStackHint: 'The list comes from the Host. You can also type a comma-separated fallback stack, e.g. “JetBrainsMono Nerd Font Mono, monospace”.',
       familyAria: 'Terminal font family',
+      streamHint: 'Host fonts are streamed to this browser on demand, so a remote machine renders them without installing anything locally.',
       catalogLoading: 'Reading the Host’s fonts…',
       catalogReady: 'The Host has {count} font families, {mono} of them monospaced.',
       catalogError: 'Could not read the Host’s fonts: {error}',
@@ -202,7 +205,14 @@ window.__ModuleLoader__.load({
      * failed. A failed catalog never blocks the field: the family stays free
      * text, the list is only a suggestion source.
      */
-    let fontCatalogState = Object.freeze({ status: 'idle', fonts: [], source: undefined, error: undefined, total: 0 })
+    let fontCatalogState = Object.freeze({
+      status: 'idle',
+      fonts: [],
+      source: undefined,
+      error: undefined,
+      total: 0,
+      streaming: Object.freeze({ supported: false, styles: [] }),
+    })
     let fontCatalogRequest
     const fontCatalogListeners = new Set()
 
@@ -214,6 +224,7 @@ window.__ModuleLoader__.load({
         source: next.source,
         error: next.error,
         total: next.total ?? next.fonts?.length ?? 0,
+        streaming: next.streaming ?? fontCatalogState.streaming,
       })
       for (const listener of fontCatalogListeners) listener()
     }
@@ -263,7 +274,20 @@ window.__ModuleLoader__.load({
           const body = await response.json()
           if (body?.ok !== true) throw new Error(typeof body?.error === 'string' ? body.error : 'invalid font catalog')
           const fonts = normalizeFontCatalog(body.fonts)
-          setFontCatalog({ status: 'ready', fonts, source: typeof body.source === 'string' ? body.source : undefined })
+          setFontCatalog({
+            status: 'ready',
+            fonts,
+            source: typeof body.source === 'string' ? body.source : undefined,
+            streaming: normalizeStreaming(body.streaming),
+          })
+          // Publishing and re-adoption are best effort: a broken terminal
+          // surface must never turn a good catalog into an error state.
+          try {
+            ensureRemoteStack(currentSettings.family)
+            adoptMountedTerminals(currentSettings)
+          } catch {
+            // Ignore: the next scan retries once the surface is usable.
+          }
         } catch (error) {
           setFontCatalog({
             status: 'error',
@@ -276,6 +300,101 @@ window.__ModuleLoader__.load({
         return fontCatalogState
       })()
       return fontCatalogRequest
+    }
+
+    /**
+     * Normalize the Host's streaming capability flag.
+     * @param {unknown} value - wire value.
+     * @returns {{supported:boolean,styles:string[]}} capability.
+     */
+    function normalizeStreaming(value) {
+      if (value === null || typeof value !== 'object') return Object.freeze({ supported: false, styles: [] })
+      const styles = Array.isArray(value.styles) ? value.styles.filter((style) => typeof style === 'string') : []
+      return Object.freeze({ supported: value.supported === true, styles: Object.freeze(styles) })
+    }
+
+    /** Families whose `@font-face` rules this page already published. */
+    const remoteFamilies = new Set()
+    /** `<style>` element carrying the published `@font-face` rules, created on first use. */
+    let remoteFaceStyle
+
+    /**
+     * Quote a family list segment for CSS.
+     * @param {string} family - one family name, never a stack.
+     * @returns {string} a double-quoted CSS string with escapes.
+     */
+    function cssString(family) {
+      return `"${String(family).replace(/\\/gu, '\\\\').replace(/"/gu, '\\"')}"`
+    }
+
+    /**
+     * URL of one streamed face on this Host.
+     * @param {string} family - family name.
+     * @param {'regular'|'bold'|'italic'|'bolditalic'} style - face.
+     * @returns {string} same-origin URL.
+     */
+    function remoteFaceUrl(family, style) {
+      return `${FONT_FILE_ROUTE}${encodeURIComponent(family)}/${style}.ttf`
+    }
+
+    /**
+     * Publish `@font-face` rules for one Host family, so a browser that does not
+     * have the font installed downloads it from this Host instead of falling
+     * back. Called lazily: nothing is fetched until the family is selected or
+     * previewed, and the browser itself fetches a face only when a glyph needs it.
+     *
+     * The rules cover regular and bold with both styles, which is what a
+     * terminal renders. Each `src` points at the streaming route, so the file
+     * arrives compressed and stays in the HTTP cache.
+     *
+     * @param {string} family - family name to publish.
+     * @returns {boolean} whether a rule set was published now.
+     */
+    function ensureRemoteFamily(family) {
+      const name = typeof family === 'string' ? family.trim() : ''
+      if (name === '' || typeof document === 'undefined') return false
+      if (fontCatalogState.streaming?.supported !== true) return false
+      if (remoteFamilies.has(name)) return false
+      const registered = fontCatalogState.fonts.some((font) => font.family.toLowerCase() === name.toLowerCase())
+      if (!registered) return false
+      remoteFamilies.add(name)
+      if (remoteFaceStyle === undefined) {
+        remoteFaceStyle = document.createElement('style')
+        remoteFaceStyle.dataset.plugin = PLUGIN_ID
+        remoteFaceStyle.dataset.pluginCss = `${PLUGIN_ID}/HostFonts.css`
+        document.head.appendChild(remoteFaceStyle)
+      }
+      const quoted = cssString(name)
+      // `local()` comes first so a browser that already has the face installed
+      // uses it without downloading; the streaming URL is the fallback that
+      // makes the Host font work on a machine where it is not installed.
+      const face = (weight, style, suffix) => `@font-face{font-family:${quoted};font-style:${style};font-weight:${weight};font-display:swap;src:local(${quoted}),url("${remoteFaceUrl(name, suffix)}") format("truetype")}`
+      remoteFaceStyle.textContent += [
+        face(400, 'normal', 'regular'),
+        face(700, 'normal', 'bold'),
+        face(400, 'italic', 'italic'),
+        face(700, 'italic', 'bolditalic'),
+      ].join('')
+      // Warm the regular face so the next paint already has the metrics xterm
+      // measures; a failure here only means the fallback stays in effect.
+      try {
+        document.fonts?.load?.(`13px ${quoted}`)?.catch?.(() => {})
+      } catch {
+        // No FontFaceSet (older engine): the CSS rule still works when used.
+      }
+      return true
+    }
+
+    /**
+     * Publish rules for every family named in a CSS font stack.
+     * @param {string} value - comma-separated family list.
+     * @returns {void}
+     */
+    function ensureRemoteStack(value) {
+      for (const part of String(value ?? '').split(',')) {
+        const family = part.trim().replace(/^["']|["']$/gu, '')
+        if (family !== '') ensureRemoteFamily(family)
+      }
     }
 
     /** The segment of a comma-separated stack the picker is currently editing. */
@@ -692,6 +811,9 @@ window.__ModuleLoader__.load({
      */
     function adoptMountedTerminals(settings) {
       if (typeof document === 'undefined') return 0
+      // A Host font the browser lacks must be published as a web font before
+      // the emulator measures its cells, or xterm would measure the fallback.
+      ensureRemoteStack(settings.family)
       let found = 0
       for (const xterm of document.querySelectorAll('[data-sidebar-terminal] .xterm')) {
         const screen = xterm.parentElement
@@ -1121,6 +1243,9 @@ window.__ModuleLoader__.load({
           popover,
         ),
         catalogNote,
+        catalog.streaming?.supported === true && value.trim() !== ''
+          ? React.createElement('p', { className: 'dshTerminalFont_hint', 'data-terminal-font-streaming': true }, t('streamHint'))
+          : null,
         hint === undefined ? null : React.createElement('p', { className: 'dshTerminalFont_hint' }, hint),
       )
     }
@@ -1160,6 +1285,9 @@ window.__ModuleLoader__.load({
       const parsed = normalizeDraft(draft)
       const invalid = sizeInvalid || lineHeightInvalid
       const previewFont = normalizeFamily(draft.family) ?? FALLBACK_OPTIONS.fontFamily
+      // The preview must show the Host face the terminal will use, so publish
+      // the rule as soon as the family is typed.
+      ensureRemoteStack(previewFont)
       const update = (field, value) => {
         setDraft((previous) => ({ ...previous, [field]: value }))
         if (field === 'size') setSizeInvalid(false)
@@ -1372,7 +1500,13 @@ window.__ModuleLoader__.load({
       subscribe,
       FontFamilyPicker,
       SidebarTerminalEnhanceConfig,
+      cssString,
+      ensureRemoteFamily,
+      ensureRemoteStack,
       fontCatalogState: () => fontCatalogState,
+      normalizeStreaming,
+      remoteFamilies,
+      remoteFaceUrl,
       fontQuery,
       scoreFontFamily,
       withSelectedFamily,

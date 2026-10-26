@@ -2,7 +2,14 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  FONT_FILE_PREFIX,
   FONT_LIST_PATH,
+  decodeFamilySegment,
+  loadFace,
+  parseFaceRequest,
+  resetFaceCache,
+  resolveFace,
+  streamingSupport,
   fontCatalog,
   mergeFonts,
   parseFamilyLines,
@@ -122,4 +129,74 @@ test('the catalog is cached until explicitly refreshed', async () => {
 
 test('the route path stays under the component namespace', () => {
   assert.equal(FONT_LIST_PATH, '/sidebar-terminal-enhance/fonts')
+})
+
+test('a face request splits family and style, rejecting traversal and unknown styles', () => {
+  assert.deepEqual(parseFaceRequest('Iosevka%20Nerd%20Font%20Mono/regular.ttf'), {
+    family: 'Iosevka Nerd Font Mono',
+    style: 'regular',
+  })
+  assert.deepEqual(parseFaceRequest('DejaVu%20Sans%20Mono/bolditalic.ttf'), {
+    family: 'DejaVu Sans Mono',
+    style: 'bolditalic',
+  })
+  assert.throws(() => parseFaceRequest('DejaVu%20Sans%20Mono'), /expected/u)
+  assert.throws(() => parseFaceRequest('/regular.ttf'), /expected/u)
+  assert.throws(() => parseFaceRequest('DejaVu%20Sans%20Mono/stretched.ttf'), /expected/u)
+  assert.throws(() => parseFaceRequest('..%2F..%2Fetc%2Fpasswd/regular.ttf'), /invalid family name/u)
+  assert.throws(() => decodeFamilySegment('%E0%A4%A'), /malformed/u)
+})
+
+test('resolveFace rejects silent fontconfig substitutions', async () => {
+  const run = async (file, args) => {
+    assert.equal(file, 'fc-match')
+    assert.match(args.at(-1), /:style=Bold$/u)
+    return { stdout: '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf\nNoto Sans\nRegular\n' }
+  }
+  await assert.rejects(() => resolveFace('Iosevka Nerd Font Mono', 'bold', { run }), /not installed/u)
+
+  const ok = async () => ({
+    stdout: '/home/sang/.local/share/fonts/IosevkaNerdFont/IosevkaNerdFontMono-Bold.ttf\nIosevka Nerd Font Mono,Iosevka NFM\nBold Bold\n',
+  })
+  assert.deepEqual(await resolveFace('Iosevka Nerd Font Mono', 'bold', { run: ok }), {
+    file: '/home/sang/.local/share/fonts/IosevkaNerdFont/IosevkaNerdFontMono-Bold.ttf',
+    family: 'Iosevka Nerd Font Mono,Iosevka NFM',
+    style: 'Bold Bold',
+  })
+  await assert.rejects(() => resolveFace('Mono', 'stretched', { run: ok }), /unknown style/u)
+})
+
+test('streamingSupport reports whether fontconfig can stream faces', async () => {
+  const yes = await streamingSupport({ run: async () => ({ stdout: '/usr/share/fonts/x.ttf' }) })
+  assert.equal(yes.supported, true)
+  assert.deepEqual(yes.styles, ['regular', 'bold', 'italic', 'bolditalic'])
+
+  const missing = await streamingSupport({ run: async () => { throw new Error('spawn fc-match ENOENT') } })
+  assert.equal(missing.supported, false)
+  assert.match(missing.reason, /fontconfig is unavailable/u)
+
+  const empty = await streamingSupport({ run: async () => ({ stdout: '  ' }) })
+  assert.equal(empty.supported, false)
+})
+
+test('loadFace compresses once and revalidates with an etag', async () => {
+  const { mkdtemp, writeFile } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const { rm } = await import('node:fs/promises')
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-font-'))
+  const file = join(dir, 'Face.ttf')
+  // gzip/brotli need real bytes but never a real font, only a stable buffer.
+  await writeFile(file, Buffer.from('x'.repeat(4096)))
+  resetFaceCache()
+  const first = await loadFace(file, 'gzip')
+  assert.equal(first.encoding, 'gzip')
+  assert.match(first.etag, /^"[0-9a-f]+-[0-9a-f]+"$/u)
+  const again = await loadFace(file, 'gzip')
+  assert.equal(again.body, first.body)
+  const brotli = await loadFace(file, 'br')
+  assert.equal(brotli.encoding, 'br')
+  assert.notEqual(brotli.body, first.body)
+  await assert.rejects(() => loadFace(dir), /not a font file/u)
+  await rm(dir, { recursive: true, force: true })
 })

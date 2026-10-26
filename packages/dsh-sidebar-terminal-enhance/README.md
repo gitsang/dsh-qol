@@ -16,7 +16,7 @@ groups:
 
 | Group | Field | Meaning |
 |---|---|---|
-| Font | Font family | Searchable combobox over the Host's installed families, or any typed CSS font-family list |
+| Font | Font family | Searchable combobox over the Host's installed families, streamed to the browser on demand, or any typed CSS font-family list |
 | Font | Size | Integer 8–32 px |
 | Font | Line height | Multiplier 0.9–2, useful for icon-only glyph rows |
 | Palette | Mode | **Light**, **Dark**, or **Follow appearance** |
@@ -63,6 +63,51 @@ The catalog is a **suggestion source, not a validator**. When the browser runs o
 a different machine than the Host, the listed families belong to the Host; the
 field therefore keeps accepting any typed value, and an unknown family simply
 falls through to the browser's own fallback chain.
+
+### Using Host fonts on a remote browser
+
+A font installed on the Host is useless to a browser on another machine — the
+browser resolves families locally. This component therefore streams the face
+itself. When a family from the catalog is selected (or typed into the preview),
+the browser half publishes `@font-face` rules for it:
+
+```css
+@font-face {
+  font-family: "Iosevka Nerd Font Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Iosevka Nerd Font Mono"),
+       url("/sidebar-terminal-enhance/font/Iosevka%20Nerd%20Font%20Mono/regular.ttf") format("truetype");
+}
+```
+
+`local()` comes first, so a browser that already has the face uses it without a
+download. Otherwise the browser fetches the face from this route:
+
+```text
+GET /sidebar-terminal-enhance/font/<family>/<style>.ttf
+style ∈ regular | bold | italic | bolditalic
+```
+
+The Host resolves the family with `fc-match`, refusing silent substitutions (a
+missing family would otherwise match some unrelated default), compresses the
+file once with brotli (or gzip when the browser does not accept br), and serves
+it with `Cache-Control: public, max-age=86400, no-transform` plus an `ETag`.
+Compressed faces are cached in memory up to 48 MB, keyed by path, mtime and
+size, so a font upgrade is re-read instead of served stale.
+
+This is what makes a remote browser work with no local installation at all. It
+also means:
+
+- only the four faces a terminal renders are published; other weights fall back;
+- the first terminal open downloads the regular (and bold) face once — roughly
+  3.3 MB over the wire for Iosevka — then the HTTP cache answers;
+- the browser needs no permission and no extra step: selecting the family is
+  enough;
+- the component reports `streaming.supported` in the catalog response, and the
+  field shows a hint when Host streaming is available. Without fontconfig the
+  field still works as free text backed by the browser's own fonts.
 
 ## Why the terminal needs more than plain CSS
 
@@ -121,8 +166,9 @@ Then:
 - The palette choice is stored under the historical
   `@gitsang/dsh-terminal-color/preference` key, so a choice made before the two
   terminal components were merged survives the upgrade.
-- The browser only resolves fonts installed on the client machine. A font
-  installed on the dsh Host does nothing for a remote browser.
+- A family picked from the catalog is streamed to the browser, so a remote
+  machine needs no local installation. Only a family typed by hand that the
+  Host does not list relies on the browser's own fonts.
 
 ## Known limitations
 
@@ -133,6 +179,9 @@ Then:
   breaking the terminal — but it can silently stop applying.
 - Browser security does not let a page enumerate installed fonts. A typo in the
   family name simply falls back to the next entry in the list.
+- Streaming downloads one face per terminal session at first use. On a slow link
+  the first paint may show the fallback until `font-display: swap` resolves,
+  and `xterm` re-measures cells when the rule set is published.
 - A page that already loaded the terminal before this plugin first ran still
   gets adopted by the observer, but its scrollback is not re-wrapped, so old
   lines keep the old column count until a program redraws them.

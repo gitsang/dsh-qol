@@ -84,6 +84,11 @@ const {
   setSize,
   CSS,
   COLOR_STORAGE_KEY,
+  cssString,
+  ensureRemoteFamily,
+  ensureRemoteStack,
+  normalizeStreaming,
+  remoteFaceUrl,
   PREVIEW_GLYPHS,
   PREVIEW_ICONS,
   PREVIEW_LOWERCASE,
@@ -520,4 +525,87 @@ test('the catalog reader reports failures as state instead of throwing', async (
   assert.deepEqual(ready.fonts, [{ family: 'DejaVu Sans Mono', monospace: true }])
 
   globalThis.fetch = saved
+})
+
+test('CSS family names are quoted and escaped', () => {
+  assert.equal(cssString('DejaVu Sans Mono'), '"DejaVu Sans Mono"')
+  assert.equal(cssString('Quote"Inside'), '"Quote\\"Inside"')
+  assert.equal(cssString('Back\\slash'), '"Back\\\\slash"')
+})
+
+test('remote face URLs stay inside the component namespace', () => {
+  assert.equal(
+    remoteFaceUrl('Iosevka Nerd Font Mono', 'bold'),
+    '/sidebar-terminal-enhance/font/Iosevka%20Nerd%20Font%20Mono/bold.ttf',
+  )
+  assert.equal(remoteFaceUrl('A/B', 'italic'), '/sidebar-terminal-enhance/font/A%2FB/italic.ttf')
+})
+
+test('the streaming capability is validated from the wire', () => {
+  assert.deepEqual(normalizeStreaming({ supported: true, styles: ['regular', 'bold', 42] }), {
+    supported: true,
+    styles: ['regular', 'bold'],
+  })
+  assert.equal(normalizeStreaming(null).supported, false)
+  assert.equal(normalizeStreaming({ supported: 'yes' }).supported, false)
+})
+
+test('publishing a Host family emits four weighted faces once', () => {
+  const sheets = []
+  globalThis.document = {
+    head: { appendChild: (element) => sheets.push(element) },
+    createElement: () => ({ dataset: {}, textContent: '' }),
+    fonts: { load: () => Promise.resolve() },
+  }
+  const saved = client.__test.fontCatalogState
+  // Seed the catalog the way a successful Host response does.
+  const state = saved()
+  assert.equal(typeof state.streaming.supported, 'boolean')
+
+  client.__test.remoteFamilies.clear()
+  const hostCatalog = [
+    { family: 'Iosevka Nerd Font Mono', monospace: true },
+    { family: 'DejaVu Sans Mono', monospace: true },
+  ]
+  // Simulate the ready state the page reaches through loadHostFonts.
+  const seed = async () => {
+    const savedFetch = globalThis.fetch
+    globalThis.fetch = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        source: 'fc-list',
+        fonts: hostCatalog,
+        streaming: { supported: true, styles: ['regular', 'bold', 'italic', 'bolditalic'] },
+      }),
+    })
+    await client.__test.loadHostFonts(true)
+    globalThis.fetch = savedFetch
+  }
+
+  return seed().then(() => {
+    assert.equal(ensureRemoteFamily('Iosevka Nerd Font Mono'), true)
+    assert.equal(sheets.length, 1)
+    const css = sheets[0].textContent
+    assert.match(css, /@font-face\{font-family:"Iosevka Nerd Font Mono";font-style:normal;font-weight:400/u)
+    assert.match(css, /font-weight:700/u)
+    assert.match(css, /font-style:italic/u)
+    assert.match(css, /\/sidebar-terminal-enhance\/font\/Iosevka%20Nerd%20Font%20Mono\/regular\.ttf/u)
+
+    // Idempotent: a second call adds nothing.
+    assert.equal(ensureRemoteFamily('Iosevka Nerd Font Mono'), false)
+    assert.equal(sheets.length, 1)
+
+    // Families the Host does not list are never published.
+    assert.equal(ensureRemoteFamily('Not A Host Font'), false)
+
+    // A whole stack publishes each Host family it names.
+    ensureRemoteStack('DejaVu Sans Mono, monospace')
+    assert.match(sheets[0].textContent, /font-family:"DejaVu Sans Mono"/u)
+    assert.doesNotMatch(sheets[0].textContent, /font-family:"monospace"/u)
+
+    client.__test.remoteFamilies.clear()
+    delete globalThis.document
+  })
 })
