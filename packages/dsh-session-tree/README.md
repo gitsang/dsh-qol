@@ -1,13 +1,14 @@
 # @gitsang/dsh-session-tree
 
-A DSH Web component that adds a dedicated **Tree** conversation View, drawing Session branch lineage as a git-style graph, and lets you branch a Session from any durable event.
+A DSH Web component that adds a dedicated **Trajectory Tree** conversation View, drawing Session branch lineage as a git-style graph, and lets you branch a Session from any durable event.
 
 ## What it does
 
-- **Dedicated Tree tab** — its own Conversation View beside Chat and Trajectory. It does not inject into or restyle the native Trajectory ledger.
-- **Git-style lanes** — the current Session is lane 0 (the main trunk). Every descendant fork gets its own lane and a curved edge from its parent lane. There are no merge edges.
+- **Dedicated Trajectory Tree tab** — its own Conversation View beside Chat and Trajectory. It does not inject into or restyle the native Trajectory ledger.
+- **Git-style lanes** — the Session path you are viewing is re-rooted as lane 0 (the main trunk). Every ancestor Session's other forks and its own later events become side lanes, including an explicit `Original mainline` lane when you are viewing a fork. There are no merge edges.
 - **DSH-native visual language** — the same 30px ledger rows, kind pills, turn separators, borders, and muted colors as Trajectory.
-- **Expand / collapse** — a `−/+` node at each fork folds the whole descendant subtree and reports how many rows are hidden.
+- **Expand / collapse** — a `−/+` node at each side fork folds the whole descendant subtree and reports how many rows are hidden.
+- **Full family** — every Session in the connected family is projected, not only the selected Session's descendants.
 - **Edit a sent message** — the pencil sits beside the Host's own Copy button on every user message. The Host forks from the event immediately before that Turn, then sends the edited prompt into the new Session.
 - **No Chat renderer replacement** — the component adds two sibling buttons to the native action row and leaves Copy and every other host control intact.
 
@@ -33,8 +34,8 @@ Restart the profile after installing; refresh the browser after UI-only changes.
 
 ## Use
 
-1. Open a conversation and switch to **Tree**.
-2. The current Session is the main trunk; descendants appear as branched lanes after their fork point.
+1. Open a conversation and switch to **Trajectory Tree**.
+2. The Session you opened is shown as the main trunk, even if it was originally created as a fork. Ancestor siblings and the old mainline continuation are side lanes.
 3. To edit a past message: use the pencil beside the native Copy button on a user message. Saving forks the conversation from before that Turn and sends the edited text.
 4. To fork from the latest event of the current branch, use the branch action on a user message.
 

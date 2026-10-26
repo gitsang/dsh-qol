@@ -45,11 +45,13 @@ test('the inline Trajectory DOM injector is gone', () => {
   assert.equal(source.includes('useViewToggle'), false)
 })
 
-test('the tree is projected as lane-based branches with the current Session at lane 0', () => {
+test('the selected Session path is projected as the mainline trunk', () => {
   assert.match(source, /function projectTree/)
-  assert.match(source, /const laneById = new Map\(\[\[currentId, 0\]\]\)/)
+  assert.match(source, /const path = chainTo\(data, currentId\)/)
+  assert.match(source, /const rootId = path\[0\]\?\.sessionId \?\? currentId/)
+  assert.match(source, /const buildMainline = \(sessionId\) =>/)
   assert.match(source, /function treeVisibleEvents/)
-  assert.match(source, /branchCount: laneById\.size/)
+  assert.match(source, /branchCount: byId\.size/)
   assert.match(source, /activeLanes/)
 })
 
@@ -62,10 +64,10 @@ test('branch rows reuse native Trajectory visual vocabulary', () => {
   assert.match(source, /data-toggle/)
 })
 
-test('expand and collapse fold descendants in the projection', () => {
-  assert.match(source, /const isCollapsed = !isRoot && collapsed\.has\(sessionId\)/)
-  assert.match(source, /if \(isCollapsed\) return branchRows/)
-  assert.match(source, /countHidden/)
+test('expand and collapse fold side-branch descendants', () => {
+  assert.match(source, /const isCollapsed = options\.isMainline !== true && collapsed\.has\(branchId\)/)
+  assert.match(source, /if \(isCollapsed\) return rows/)
+  assert.match(source, /countHiddenFrom/)
   assert.match(source, /branchExpand/)
   assert.match(source, /branchCollapse/)
 })
@@ -76,10 +78,25 @@ test('the family projection is cached per Session', () => {
   assert.match(source, /TREE_CACHE\.get\(sessionId\)/)
 })
 
-
 test('fork edges leave the shared parent point and descend in the child lane', () => {
   assert.match(source, /phase: index === anchorIndex \? 'stub'/)
   assert.match(source, /C\$\{parentX\} 22 \$\{childX\} 20 \$\{childX\} 24 L\$\{childX\} 30/)
-  assert.match(source, /Siblings forked at the same event share one parent anchor/)
-  assert.match(source, /if \(anchorRow === null && insertAt > 0\)/)
+  assert.match(source, /forkAnchorRow/)
+  assert.match(source, /pendingBranchEdges/)
+})
+
+test('a selected branch makes the old mainline continuation a side lane', () => {
+  assert.match(source, /const pathChildId = pathNext\.get\(sessionId\)/)
+  assert.match(source, /isContinuation: true/)
+  assert.match(source, /excludeChildren: new Set\(\[pathChildId\]\)/)
+  assert.match(source, /t\('continuation'\)/)
+  assert.match(source, /Original mainline/)
+  assert.match(source, /原主线继续/)
+})
+
+test('the conversation tab is now labelled 轨迹树 / Trajectory Tree', () => {
+  assert.match(source, /tab: '轨迹树'/)
+  assert.match(source, /tab: 'Trajectory Tree'/)
+  assert.equal(source.includes("tab: 'Tree'"), false)
+  assert.equal(source.includes("tab: '树视图'"), false)
 })

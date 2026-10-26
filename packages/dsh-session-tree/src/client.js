@@ -33,7 +33,8 @@ window.__ModuleLoader__.load({
       branchCollapse: '收起分支',
       branchExpand: '展开分支',
       branchMore: '还有 {count} 条',
-      tab: '树视图',
+      continuation: '原主线继续',
+      tab: '轨迹树',
       treeTitle: '轨迹树',
       treeSubtitle: '{count} 个分支 · 当前 {current}',
       refresh: '刷新',
@@ -70,7 +71,8 @@ window.__ModuleLoader__.load({
       branchCollapse: 'Collapse branch',
       branchExpand: 'Expand branch',
       branchMore: '{count} more',
-      tab: 'Tree',
+      continuation: 'Original mainline',
+      tab: 'Trajectory Tree',
       treeTitle: 'Trajectory tree',
       treeSubtitle: '{count} branches · current {current}',
       refresh: 'Refresh',
@@ -306,6 +308,20 @@ window.__ModuleLoader__.load({
       return { byId, children }
     }
 
+    function chainTo(data, sessionId) {
+      const { byId } = familyChildren(data)
+      const chain = []
+      const seen = new Set()
+      let cursor = sessionId
+      while (typeof cursor === 'string' && byId.has(cursor) && !seen.has(cursor)) {
+        seen.add(cursor)
+        chain.unshift(byId.get(cursor))
+        const parent = byId.get(cursor)?.parentSessionId
+        cursor = typeof parent === 'string' ? parent : null
+      }
+      return chain
+    }
+
     const TREE_LANE_COLORS = ['#4b8dff', '#8f6bff', '#e35d83', '#20a464', '#c98a00', '#2aa8b8', '#d1663a']
     const TREE_ROLE_KIND = {
       user: 'user',
@@ -338,105 +354,257 @@ window.__ModuleLoader__.load({
       if (!byId.has(currentId)) {
         return { rows: [], branchCount: 0, maxLane: 0, firstByLane: new Map(), lastByLane: new Map() }
       }
-      const laneById = new Map([[currentId, 0]])
-      let nextLane = 1
-      const assignLanes = (parentId) => {
-        for (const childId of children.get(parentId) ?? []) {
-          laneById.set(childId, nextLane)
-          nextLane += 1
-          assignLanes(childId)
-        }
-      }
-      assignLanes(currentId)
 
-      const countHidden = (sessionId) => {
-        const events = treeVisibleEvents(byId.get(sessionId))
-        let total = Math.max(0, events.length - 1)
-        for (const childId of children.get(sessionId) ?? []) {
-          total += treeVisibleEvents(byId.get(childId)).length + countHidden(childId)
+      const path = chainTo(data, currentId)
+      const rootId = path[0]?.sessionId ?? currentId
+      const pathSet = new Set(path.map((session) => session.sessionId))
+      const pathNext = new Map()
+      for (let index = 0; index < path.length - 1; index += 1) {
+        pathNext.set(path[index].sessionId, path[index + 1].sessionId)
+      }
+
+      const eventCache = new Map()
+      const eventsFor = (sessionId) => {
+        if (!eventCache.has(sessionId)) eventCache.set(sessionId, treeVisibleEvents(byId.get(sessionId)))
+        return eventCache.get(sessionId)
+      }
+      const childrenOf = (sessionId) => children.get(sessionId) ?? []
+      const findAnchorIndex = (sessionId, forkAtSeq) => {
+        if (!Number.isSafeInteger(forkAtSeq)) return -1
+        const events = eventsFor(sessionId)
+        for (let index = events.length - 1; index >= 0; index -= 1) {
+          if (events[index].seq <= forkAtSeq) return index
+        }
+        return -1
+      }
+      const countHiddenFrom = (sessionId, startIndex = 0) => {
+        const events = eventsFor(sessionId)
+        let total = Math.max(0, events.length - startIndex - 1)
+        for (const childId of childrenOf(sessionId)) {
+          total += eventsFor(childId).length + countHiddenFrom(childId, 0)
         }
         return total
       }
 
-      const build = (sessionId, parentLane, isRoot) => {
-        const session = byId.get(sessionId)
-        const lane = laneById.get(sessionId) ?? 0
-        const allEvents = treeVisibleEvents(session)
-        const isCollapsed = !isRoot && collapsed.has(sessionId)
-        const shown = allEvents.length === 0
-          ? [{ seq: Number.isSafeInteger(session?.forkAtSeq) ? session.forkAtSeq : 0, role: 'context', text: '', turn: null }]
-          : isCollapsed
-            ? allEvents.slice(0, 1)
-            : allEvents
-        const childIds = children.get(sessionId) ?? []
-        const collapsible = !isRoot && (allEvents.length > 1 || childIds.length > 0)
-        const branchRows = shown.map((event, index) => ({
-          kind: 'event',
-          sessionId,
-          lane,
-          parentLane: index === 0 ? parentLane : null,
-          event,
-          branchStart: index === 0 && !isRoot,
-          isRoot,
-          branchTitle: sessionTitle(list, sessionId),
+      let nextLane = 1
+      const allocateLane = () => nextLane++
+
+      const makeRow = (sessionId, lane, event, options = {}) => ({
+        kind: 'event',
+        sessionId,
+        lane,
+        event,
+        branchStart: options.branchStart === true,
+        parentLane: Number.isSafeInteger(options.parentLane) ? options.parentLane : null,
+        branchId: options.branchId ?? sessionId,
+        branchTitle: options.branchTitle ?? sessionTitle(list, sessionId),
+        branchForkAt: Number.isSafeInteger(options.branchForkAt) ? options.branchForkAt : null,
+        collapsible: options.collapsible === true,
+        collapsed: options.collapsed === true,
+        hiddenCount: options.hiddenCount ?? 0,
+        isMainline: options.isMainline === true,
+        isContinuation: options.isContinuation === true,
+        ...(options.forkAnchorRow === undefined ? {} : { forkAnchorRow: options.forkAnchorRow }),
+      })
+
+      /**
+       * Render one side branch, its own events and every descendant fork.
+       * `startIndex` is used by the original-mainline continuation, which starts
+       * after the fork event instead of replaying the whole Session.
+       */
+      const buildSide = (sessionId, lane, options = {}) => {
+        const startIndex = options.startIndex ?? 0
+        const events = eventsFor(sessionId)
+        const branchId = options.branchId ?? sessionId
+        const excluded = options.excludeChildren ?? new Set()
+        const shown = events.length === 0
+          ? [{ seq: Number.isSafeInteger(byId.get(sessionId)?.forkAtSeq) ? byId.get(sessionId).forkAtSeq : 0, role: 'context', text: '', turn: null }]
+          : events.slice(startIndex)
+        if (shown.length === 0) return []
+        const childIds = childrenOf(sessionId).filter((childId) => !excluded.has(childId))
+        const isCollapsed = options.isMainline !== true && collapsed.has(branchId)
+        const collapsible = options.isMainline !== true && (shown.length > 1 || childIds.length > 0)
+        const hiddenCount = isCollapsed ? countHiddenFrom(sessionId, startIndex) : 0
+        const rows = shown.map((event, index) => makeRow(sessionId, lane, event, {
+          branchStart: options.branchStart === true && index === 0,
+          parentLane: options.parentLane,
+          branchId,
+          branchTitle: options.branchTitle,
+          branchForkAt: options.branchForkAt,
           collapsible: index === 0 && collapsible,
           collapsed: index === 0 && isCollapsed,
-          hiddenCount: isCollapsed ? countHidden(sessionId) : 0,
-          branchForkAt: Number.isSafeInteger(session?.forkAtSeq) ? session.forkAtSeq : null,
+          hiddenCount,
+          isMainline: options.isMainline === true,
+          isContinuation: options.isContinuation === true,
+          forkAnchorRow: index === 0 ? options.forkAnchorRow : undefined,
         }))
-        if (isCollapsed) return branchRows
-        let previousFork = null
-        let previousEnd = null
-        let previousAnchor = null
+        if (isCollapsed) return rows
+
+        const anchors = new Map()
         for (const childId of childIds) {
-          const childRows = build(childId, lane, false)
-          const forkAt = byId.get(childId)?.forkAtSeq
-          let insertAt = branchRows.length
-          let anchorRow = null
-          if (Number.isSafeInteger(forkAt)) {
-            if (forkAt === previousFork && previousEnd !== null) {
-              // Siblings forked at the same event share one parent anchor; only
-              // their insertion point moves past the previous sibling's block.
-              insertAt = previousEnd
-              anchorRow = previousAnchor
-            } else {
-              for (let index = branchRows.length - 1; index >= 0; index -= 1) {
-                const seq = branchRows[index]?.event?.seq
-                if (Number.isSafeInteger(seq) && seq <= forkAt) {
-                  insertAt = index + 1
-                  anchorRow = branchRows[index]
-                  break
-                }
-              }
-              // The fork may sit in an inherited prefix that this Session does
-              // not display (e.g. a child forked from an ancestor event). Attach
-              // it to the closest visible parent row so the branch still leaves
-              // the main trunk at a sensible point.
-              if (anchorRow === null && insertAt > 0) anchorRow = branchRows[insertAt - 1] ?? null
-            }
-          }
-          if (anchorRow !== null && childRows.length > 0) {
-            childRows[0] = { ...childRows[0], forkAnchorRow: anchorRow }
-          }
-          branchRows.splice(insertAt, 0, ...childRows)
-          previousFork = forkAt
-          previousEnd = insertAt + childRows.length
-          previousAnchor = anchorRow
+          const child = byId.get(childId)
+          const anchorFull = findAnchorIndex(sessionId, child?.forkAtSeq)
+          let localIndex = anchorFull < 0 ? 0 : anchorFull - startIndex
+          if (localIndex < 0) continue
+          if (localIndex >= rows.length) localIndex = rows.length - 1
+          const bucket = anchors.get(localIndex)
+          if (bucket === undefined) anchors.set(localIndex, [childId])
+          else bucket.push(childId)
         }
-        return branchRows
+
+        const output = []
+        for (let index = 0; index < rows.length; index += 1) {
+          const row = rows[index]
+          output.push(row)
+          for (const childId of anchors.get(index) ?? []) {
+            const child = byId.get(childId)
+            const childLane = allocateLane()
+            const childRows = buildSide(childId, childLane, {
+              branchStart: true,
+              parentLane: lane,
+              forkAnchorRow: row,
+              branchForkAt: child?.forkAtSeq,
+              branchTitle: sessionTitle(list, childId),
+            })
+            output.push(...childRows)
+          }
+        }
+        return output
       }
 
-      const rows = build(currentId, null, true)
-      // Route each fork edge from the parent node down to its first row: a
-      // short stub on the anchor row, a vertical run through intervening rows,
-      // then the curve into the branch node. This keeps sibling branches
-      // (forked at the same event) visibly attached to the same parent point.
-      for (const [childIndex, row] of rows.entries()) {
+      /**
+       * Render the selected Session path as lane 0. When the path leaves a
+       * Session at a fork, that Session's later events become the
+       * "original mainline" side branch, even though it remains the parent in
+       * DSH's persistent Session graph.
+       */
+      const buildMainline = (sessionId) => {
+        const events = eventsFor(sessionId)
+        const pathChildId = pathNext.get(sessionId)
+        if (pathChildId === undefined) {
+          return buildSide(sessionId, 0, {
+            startIndex: 0,
+            branchStart: false,
+            isMainline: true,
+            branchId: sessionId,
+            branchTitle: sessionTitle(list, sessionId),
+          })
+        }
+
+        const pathChild = byId.get(pathChildId)
+        const anchorFull = findAnchorIndex(sessionId, pathChild?.forkAtSeq)
+        const mainlineEnd = anchorFull
+        const mainlineEvents = mainlineEnd >= 0 ? events.slice(0, mainlineEnd + 1) : []
+        const mainlineRows = mainlineEvents.map((event, index) => makeRow(sessionId, 0, event, {
+          isMainline: true,
+          branchId: sessionId,
+          branchTitle: sessionTitle(list, sessionId),
+          forkAnchorRow: index === 0 ? undefined : undefined,
+        }))
+        const anchorRow = mainlineRows.at(-1) ?? null
+        const childrenList = childrenOf(sessionId)
+        const sideChildren = childrenList.filter((childId) => childId !== pathChildId)
+
+        const output = []
+        const handled = new Set()
+        for (let index = 0; index < mainlineRows.length; index += 1) {
+          const row = mainlineRows[index]
+          output.push(row)
+          for (const childId of sideChildren) {
+            const child = byId.get(childId)
+            const childAnchor = findAnchorIndex(sessionId, child?.forkAtSeq)
+            const effectiveAnchor = childAnchor < 0 ? 0 : childAnchor
+            if (effectiveAnchor !== index || effectiveAnchor === mainlineEnd) continue
+            handled.add(childId)
+            const childLane = allocateLane()
+            output.push(...buildSide(childId, childLane, {
+              branchStart: true,
+              parentLane: 0,
+              forkAnchorRow: row,
+              branchForkAt: child?.forkAtSeq,
+              branchTitle: sessionTitle(list, childId),
+            }))
+          }
+        }
+
+        // The selected path continues in lane 0 without a branch edge.
+        output.push(...buildMainline(pathChildId))
+
+        // Siblings that fork at the same event as the selected path share the
+        // same parent node; they are rendered after the path so the trunk wins.
+        for (const childId of sideChildren) {
+          if (handled.has(childId)) continue
+          const child = byId.get(childId)
+          const childAnchor = findAnchorIndex(sessionId, child?.forkAtSeq)
+          const effectiveAnchor = childAnchor < 0 ? 0 : childAnchor
+          if (effectiveAnchor !== mainlineEnd) continue
+          handled.add(childId)
+          const childLane = allocateLane()
+          const childRows = buildSide(childId, childLane, {
+            branchStart: true,
+            parentLane: 0,
+            forkAnchorRow: anchorRow,
+            branchForkAt: child?.forkAtSeq,
+            branchTitle: sessionTitle(list, childId),
+          })
+          output.push(...childRows)
+        }
+
+        // Everything this Session did after the selected fork is the original
+        // mainline continuing on a side lane.
+        if (mainlineEnd + 1 < events.length) {
+          const continuationLane = allocateLane()
+          const continuationRows = buildSide(sessionId, continuationLane, {
+            startIndex: mainlineEnd + 1,
+            branchStart: true,
+            parentLane: 0,
+            forkAnchorRow: anchorRow,
+            branchForkAt: pathChild?.forkAtSeq,
+            branchTitle: `${t('continuation')} · ${sessionTitle(list, sessionId)}`,
+            branchId: `${sessionId}@continuation${mainlineEnd + 1}`,
+            isContinuation: true,
+            // The selected path child already occupies lane 0; never replay it
+            // under the original-mainline continuation lane.
+            excludeChildren: new Set([pathChildId]),
+          })
+          output.push(...continuationRows)
+        }
+        return output
+      }
+
+      const eventRows = buildMainline(rootId)
+
+      // Turn separators belong to the selected mainline lane only; side lanes
+      // are interleaved and should not break its reading flow.
+      const decorated = []
+      const decoratedByOriginal = new Map()
+      const lastTurnBySession = new Map()
+      for (const row of eventRows) {
+        const previousTurn = lastTurnBySession.get(row.sessionId)
+        if (row.lane === 0
+          && pathSet.has(row.sessionId)
+          && typeof row.event?.turn === 'number'
+          && row.event.turn !== previousTurn) {
+          lastTurnBySession.set(row.sessionId, row.event.turn)
+          decorated.push({ kind: 'turn', turn: row.event.turn, sessionId: row.sessionId })
+        }
+        const decoratedRow = { ...row, rowPosition: decorated.length }
+        decoratedByOriginal.set(row, decoratedRow)
+        decorated.push(decoratedRow)
+      }
+
+      // Convert the fork-anchor references into a per-row edge plan.
+      const indexOfRow = new Map()
+      decorated.forEach((row, index) => {
+        if (row.kind === 'event') indexOfRow.set(row, index)
+      })
+      for (const [childIndex, row] of decorated.entries()) {
         if (row.kind !== 'event' || !row.branchStart || row.forkAnchorRow === undefined) continue
-        const anchorIndex = rows.indexOf(row.forkAnchorRow)
-        if (anchorIndex < 0 || childIndex <= anchorIndex) continue
+        const anchorDecorated = decoratedByOriginal.get(row.forkAnchorRow)
+        const anchorIndex = anchorDecorated === undefined ? undefined : indexOfRow.get(anchorDecorated)
+        if (anchorIndex === undefined || childIndex <= anchorIndex) continue
         for (let index = anchorIndex; index <= childIndex; index += 1) {
-          const target = rows[index]
+          const target = decorated[index]
           if (target.kind !== 'event') continue
           const edges = target.pendingBranchEdges ?? []
           edges.push({
@@ -447,37 +615,24 @@ window.__ModuleLoader__.load({
           target.pendingBranchEdges = edges
         }
       }
+
       const firstByLane = new Map()
       const lastByLane = new Map()
-      rows.forEach((row, index) => {
+      decorated.forEach((row, index) => {
         if (row.kind !== 'event') return
         if (!firstByLane.has(row.lane)) firstByLane.set(row.lane, index)
         lastByLane.set(row.lane, index)
       })
-      const decorated = []
-      let lastTurn = null
-      let eventOrder = 0
-      rows.forEach((row, index) => {
-        if (row.kind !== 'event') {
-          decorated.push(row)
-          return
-        }
-        const next = { ...row, eventOrder, rowPosition: index }
-        eventOrder += 1
-        next.activeLanes = [...firstByLane.entries()]
-          .filter(([lane]) => index >= firstByLane.get(lane) && index <= lastByLane.get(lane))
+      for (const row of decorated) {
+        if (row.kind !== 'event') continue
+        row.activeLanes = [...firstByLane.entries()]
+          .filter(([lane]) => row.rowPosition >= firstByLane.get(lane) && row.rowPosition <= lastByLane.get(lane))
           .map(([lane]) => lane)
-        if (next.sessionId === currentId
-          && typeof next.event.turn === 'number'
-          && next.event.turn !== lastTurn) {
-          lastTurn = next.event.turn
-          decorated.push({ kind: 'turn', turn: next.event.turn })
-        }
-        decorated.push(next)
-      })
+      }
+
       return {
         rows: decorated,
-        branchCount: laneById.size,
+        branchCount: byId.size,
         maxLane: Math.max(0, nextLane - 1),
         firstByLane,
         lastByLane,
@@ -543,7 +698,7 @@ window.__ModuleLoader__.load({
           onClick: row.collapsible
             ? (event) => {
               event.stopPropagation()
-              onToggle(row.sessionId, row.collapsed)
+              onToggle(row.branchId, row.collapsed)
             }
             : undefined,
         }, row.collapsible ? (row.collapsed ? '+' : '−') : null),
@@ -556,6 +711,8 @@ window.__ModuleLoader__.load({
       return React.createElement('div', {
         className: 'dstt-row',
         'data-branch-session': row.sessionId,
+        'data-branch-id': row.branchId,
+        'data-mainline': row.isMainline || undefined,
         'data-lane': row.lane,
         style: { '--dstt-lane-color': color },
       },

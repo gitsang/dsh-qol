@@ -14,7 +14,7 @@
 | 重置终端 | `@gitsang/dsh-reset-terminals` | 提供 `/reset-terminals` 和输入框按钮，在切换权限前关闭持久 PTY 会话。 |
 | 终端 | `@gitsang/dsh-sidebar-terminal-enhance` | 设置右侧终端的字体族、字号、行高，以及浅色/深色/跟随外观的主体色。 |
 | 状态栏 | `@gitsang/dsh-statusline` | 保留原统计胶囊，并把模型用时拆成首 token 等待与输出时间。 |
-| 会话树 | `@gitsang/dsh-session-tree` | 新增 git graph 风格的树视图 Tab，可从任意持久事件分叉，并可编辑旧消息后从该轮之前分叉。 |
+| 会话树 | `@gitsang/dsh-session-tree` | 新增「轨迹树」Tab，以 git graph 风格展示整棵会话树，并把当前打开的分支视为主线；可从任意持久事件分叉，也可编辑旧消息后从该轮之前分叉。 |
 
 只有 `@gitsang/dsh-qol` 是安装进 profile 的 bundle。七个组件包是它的依赖，并且**刻意不再声明自己的 `dsh.bundle`**。总 bundle 的 patch 为每个组件插入一条 Loader row，所以在 **插件 → @gitsang/dsh-qol → 包含的组件** 里可以看到七个独立开关。
 
