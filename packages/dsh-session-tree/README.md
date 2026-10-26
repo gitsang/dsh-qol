@@ -1,15 +1,15 @@
 # @gitsang/dsh-session-tree
 
-A DSH Web component that draws Session branch lineage directly inside the native **Trajectory** ledger and lets you branch a Session from any durable event.
+A DSH Web component that adds a dedicated **Tree** conversation View, drawing Session branch lineage as a git-style graph, and lets you branch a Session from any durable event.
 
 ## What it does
 
-- **Branch-only tree rows** — native Trajectory rows keep their original pill and text; descendant Sessions are appended only at their fork points as indented tree rows.
-- **Same pill styling** — branch rows reuse the host's rendered kind pill and content presentation, with `├⊟` / `└⊟` connectors and `│` guides only where a branch exists.
-- **Fork from any event** — every visible event row has a `Fork after` action; the inspector also accepts an exact event sequence.
+- **Dedicated Tree tab** — its own Conversation View beside Chat and Trajectory. It does not inject into or restyle the native Trajectory ledger.
+- **Git-style lanes** — the current Session is lane 0 (the main trunk). Every descendant fork gets its own lane and a curved edge from its parent lane. There are no merge edges.
+- **DSH-native visual language** — the same 30px ledger rows, kind pills, turn separators, borders, and muted colors as Trajectory.
+- **Expand / collapse** — a `−/+` node at each fork folds the whole descendant subtree and reports how many rows are hidden.
 - **Edit a sent message** — the pencil sits beside the Host's own Copy button on every user message. The Host forks from the event immediately before that Turn, then sends the edited prompt into the new Session.
 - **No Chat renderer replacement** — the component adds two sibling buttons to the native action row and leaves Copy and every other host control intact.
-- **Open any branch** — click a card once to inspect it, double-click or press `Open` to switch to it. Archived branches are unarchived first.
 
 The source Session is never rewritten. Every branch is an ordinary native DSH Session created with `session.fork`.
 
@@ -33,8 +33,8 @@ Restart the profile after installing; refresh the browser after UI-only changes.
 
 ## Use
 
-1. Open a conversation and switch to **Trajectory**.
-2. Descendant branches appear as indented `├⊟` / `└⊟` rows after their fork point; unaffected rows are untouched.
+1. Open a conversation and switch to **Tree**.
+2. The current Session is the main trunk; descendants appear as branched lanes after their fork point.
 3. To edit a past message: use the pencil beside the native Copy button on a user message. Saving forks the conversation from before that Turn and sends the edited text.
 4. To fork from the latest event of the current branch, use the branch action on a user message.
 
@@ -47,12 +47,17 @@ Restart the profile after installing; refresh the browser after UI-only changes.
 
 The component also cancels the source Session's active Turn before branching by default, so an answer you are replacing stops spending tokens.
 
+## Performance
+
+- The Host route reads complete Session logs; the browser caches the latest family projection per Session, so reopening a Session paints the tree immediately while a background refresh runs.
+- The tree is a normal React View rendered from one projection; it does not observe or mutate the native Trajectory DOM.
+- Each rendered row is one ledger entry, so expanding a very large family can still be expensive; collapse branches to keep the DOM small.
+
 ## Limitations
 
 - Editing preserves **text** only. Images and files attached to the original user message are not re-uploaded into the new branch.
 - Conversation branching does not roll back workspace files, commands, Git state, processes, or other tool side effects.
 - The tree route reads complete Session logs; very large families are capped at 100 Sessions in one response.
-- Descendant branch rows are inserted only when their fork anchor is in the currently rendered virtual window.
 - `dsh` is pre-release software. This package targets the public Session Controller, Session Query, and Workspace services exposed by DSH `0.2.x`.
 
 ## Development
