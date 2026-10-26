@@ -133,9 +133,9 @@ window.__ModuleLoader__.load({
       '.dstt-head > span{padding:0 8px}',
       '.dstt-head > span:first-child{text-align:left;padding-left:12px}',
       '.dstt-scroll{flex:1;min-height:0;overflow:auto;padding-bottom:calc(var(--dsh-composer-height,152px) + 16px);scrollbar-width:thin;scrollbar-color:var(--dsw-alias-scrollbar-bg-l2) transparent}',
-      '.dstt-row{display:grid;grid-template-columns:var(--dstt-event-col,236px) minmax(0,1fr);height:30px;border-bottom:.5px solid var(--dsw-alias-border-l1);transition:background-color 120ms var(--ds-ease-in-out)}',
+      '.dstt-row{position:relative;display:grid;grid-template-columns:var(--dstt-event-col,236px) minmax(0,1fr);height:30px;border-bottom:.5px solid var(--dsw-alias-border-l1);transition:background-color 120ms var(--ds-ease-in-out)}',
       '.dstt-row:hover{background:var(--dsw-alias-interactive-bg-hover)}',
-      '.dstt-eventCell{display:flex;align-items:center;justify-content:flex-start;gap:6px;min-width:0;padding:0 8px 0 8px;overflow:hidden}',
+      '.dstt-eventCell{position:relative;display:flex;align-items:center;justify-content:flex-start;gap:6px;min-width:0;padding:0 8px 0 8px;overflow:hidden}',
       '.dstt-graph{position:relative;flex:none;height:30px}',
       '.dstt-graph svg{position:absolute;inset:0;overflow:visible;pointer-events:none}',
       '.dstt-lane{fill:none;stroke-width:1.4;stroke-linecap:round;opacity:.55}',
@@ -155,10 +155,7 @@ window.__ModuleLoader__.load({
       '.dstt-branchChip::before{content:"";width:4px;height:4px;border-radius:50%;background:var(--dstt-lane-color,var(--dsw-alias-state-business-primary));flex:none}',
       '.dstt-forkNote{flex:none;color:var(--dsw-alias-label-tertiary);font-size:9px;font-variant-numeric:tabular-nums}',
       '.dstt-hiddenNote{flex:none;margin-left:auto;color:var(--dsw-alias-label-tertiary);font-size:9.5px}',
-      '.dstt-turnRow{height:29px;background:linear-gradient(90deg,color-mix(in srgb,var(--dsw-alias-label-tertiary) 5%,transparent),transparent)}',
-      '.dstt-turnGraphCell{position:relative;display:flex;align-items:center;min-width:0;overflow:hidden}',
-      '.dstt-turnLabel{display:flex;align-items:center;gap:8px;min-width:0;padding:0 8px;color:var(--dsw-alias-label-tertiary);font-size:9.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}',
-      '.dstt-turnLabel::after{content:"";flex:1;height:1px;background:var(--dsw-alias-border-l1)}',
+      '.dstt-turnLabel{position:absolute;z-index:3;top:0;left:0;max-width:100%;padding:1px 5px;border-radius:0 0 2px;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-tertiary);font:8px/10px var(--ds-font-family-code);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;user-select:none}',
       '.dstt-empty{display:flex;align-items:center;justify-content:center;height:100%;padding:24px;color:var(--dsw-alias-label-tertiary);font-size:12px;text-align:center}',
       '.dstt-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:1300;max-width:min(620px,calc(100vw - 32px));box-sizing:border-box;border-radius:10px;padding:9px 13px;background:var(--dsw-alias-bg-layer-1,var(--dsw-alias-bg-primary));box-shadow:var(--dsw-elevation-prominent,0 10px 30px rgba(0,0,0,.24));color:var(--dsw-alias-label-primary);font-size:12px;line-height:18px}',
     ].join('')
@@ -601,25 +598,25 @@ window.__ModuleLoader__.load({
       const lastTurnBySession = new Map()
       for (const row of eventRows) {
         const previousTurn = lastTurnBySession.get(row.sessionId)
-        if (row.lane === 0
+        const turnStart = row.lane === 0
           && pathSet.has(row.sessionId)
           && typeof row.event?.turn === 'number'
-          && row.event.turn !== previousTurn) {
-          lastTurnBySession.set(row.sessionId, row.event.turn)
-          decorated.push({ kind: 'turn', turn: row.event.turn, sessionId: row.sessionId, rowPosition: decorated.length })
+          && row.event.turn !== previousTurn
+        if (turnStart) lastTurnBySession.set(row.sessionId, row.event.turn)
+        const decoratedRow = {
+          ...row,
+          rowPosition: decorated.length,
+          ...(turnStart ? { turnStart: row.event.turn } : {}),
         }
-        const decoratedRow = { ...row, rowPosition: decorated.length }
         decoratedByOriginal.set(row, decoratedRow)
         decorated.push(decoratedRow)
       }
 
       // Convert the fork-anchor references into a per-row edge plan.
       const indexOfRow = new Map()
-      decorated.forEach((row, index) => {
-        if (row.kind === 'event') indexOfRow.set(row, index)
-      })
+      decorated.forEach((row, index) => indexOfRow.set(row, index))
       for (const [childIndex, row] of decorated.entries()) {
-        if (row.kind !== 'event' || !row.branchStart || row.forkAnchorRow === undefined) continue
+        if (!row.branchStart || row.forkAnchorRow === undefined) continue
         const anchorDecorated = decoratedByOriginal.get(row.forkAnchorRow)
         const anchorIndex = anchorDecorated === undefined ? undefined : indexOfRow.get(anchorDecorated)
         if (anchorIndex === undefined || childIndex <= anchorIndex) continue
@@ -639,7 +636,6 @@ window.__ModuleLoader__.load({
       const firstByLane = new Map()
       const lastByLane = new Map()
       decorated.forEach((row, index) => {
-        if (row.kind !== 'event') return
         if (!firstByLane.has(row.lane)) firstByLane.set(row.lane, index)
         lastByLane.set(row.lane, index)
       })
@@ -733,18 +729,6 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function TreeTurnRow({ row, maxLane, firstByLane, lastByLane }) {
-      return React.createElement('div', { className: 'dstt-row dstt-turnRow' },
-        React.createElement('div', { className: 'dstt-turnGraphCell' },
-          React.createElement('span', {
-            className: 'dstt-graph',
-            style: { width: `${(maxLane + 1) * 20 + 8}px` },
-          }, React.createElement(TreeLanes, { row, maxLane, firstByLane, lastByLane })),
-        ),
-        React.createElement('div', { className: 'dstt-turnLabel' }, t('turn', { turn: row.turn })),
-      )
-    }
-
     function TreeRow({ row, maxLane, firstByLane, lastByLane, onToggle }) {
       const color = treeLaneColor(row.lane)
       const graph = TreeGraph({ row, maxLane, firstByLane, lastByLane, onToggle })
@@ -754,10 +738,14 @@ window.__ModuleLoader__.load({
         'data-branch-id': row.branchId,
         'data-mainline': row.isMainline || undefined,
         'data-lane': row.lane,
+        'data-turn-start': row.turnStart !== undefined || undefined,
         style: { '--dstt-lane-color': color },
       },
         React.createElement('div', { className: 'dstt-eventCell' },
           graph,
+          row.turnStart === undefined
+            ? null
+            : React.createElement('span', { className: 'dstt-turnLabel' }, t('turn', { turn: row.turnStart })),
           React.createElement('span', {
             className: 'dstt-kindTag',
             'data-kind': treeKindForRole(row.event.role),
@@ -842,22 +830,14 @@ window.__ModuleLoader__.load({
         React.createElement('div', { className: 'dstt-scroll' },
           projection.rows.length === 0
             ? React.createElement('div', { className: 'dstt-empty' }, t('empty'))
-            : projection.rows.map((row, index) => row.kind === 'turn'
-                ? React.createElement(TreeTurnRow, {
-                    key: `turn-${row.turn}-${index}`,
-                    row,
-                    maxLane: projection.maxLane,
-                    firstByLane: projection.firstByLane,
-                    lastByLane: projection.lastByLane,
-                  })
-                : React.createElement(TreeRow, {
-                    key: `${row.sessionId}-${row.event.seq}-${index}`,
-                    row,
-                    maxLane: projection.maxLane,
-                    firstByLane: projection.firstByLane,
-                    lastByLane: projection.lastByLane,
-                    onToggle,
-                  })),
+            : projection.rows.map((row, index) => React.createElement(TreeRow, {
+                key: `${row.sessionId}-${row.event.seq}-${index}`,
+                row,
+                maxLane: projection.maxLane,
+                firstByLane: projection.firstByLane,
+                lastByLane: projection.lastByLane,
+                onToggle,
+              })),
         ),
       )
     }

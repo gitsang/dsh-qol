@@ -58,8 +58,7 @@ test('the selected Session path is projected as the mainline trunk', () => {
 test('branch rows reuse native Trajectory visual vocabulary', () => {
   assert.match(source, /className: 'dstt-kindTag'/)
   assert.match(source, /className: 'dstt-branchChip'/)
-  assert.match(source, /function TreeTurnRow/)
-  assert.match(source, /dstt-turnRow/)
+  assert.match(source, /className: 'dstt-turnLabel'/)
   assert.match(source, /className: 'dstt-lane'/)
   assert.match(source, /className: 'dstt-node'/)
   assert.match(source, /data-toggle/)
@@ -109,8 +108,8 @@ test('every fork uses one anchor-based edge treatment', () => {
   assert.equal(source.includes("if (row.branchStart && Number.isSafeInteger(row.parentLane) && !(row.pendingBranchEdges"), false)
 })
 
-test('turn separator rows keep the tree lanes continuous', () => {
-  assert.match(source, /function TreeTurnRow/)
-  assert.match(source, /rowPosition: decorated\.length/)
-  assert.match(source, /TreeLanes/)
+test('turn labels sit inside the first row of each turn like Trajectory', () => {
+  assert.equal(source.includes('function TreeTurnRow'), false)
+  assert.match(source, /turnStart: row\.event\.turn/)
+  assert.match(source, /className: 'dstt-turnLabel'/)
 })
