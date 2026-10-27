@@ -6,15 +6,35 @@ A quality-of-life bundle for [DeepSeek Harness](https://github.com/deepseek-ai/d
 
 ## Components
 
-| Component | Package | What it does |
-| --- | --- | --- |
-| Enter key swap | `@gitsang/dsh-enter-swap` | Enter inserts a newline; Ctrl/Cmd+Enter sends. |
-| Skip preview notice | `@gitsang/dsh-no-preview-notice` | Skips the versioned preview welcome notice on the new-session page. |
-| Auto review default | `@gitsang/dsh-experimental-auto-review-enhance` | Sets the experimental Auto review preset as the new-session default from its own Plugins page, with an optional Chinese denial-reason language. |
-| Reset shell | `@gitsang/dsh-reset-terminals` | `/reset-terminals` plus a composer button that closes persistent PTY sessions before a permission change. |
-| Terminal | `@gitsang/dsh-sidebar-terminal-enhance` | Sets the sidebar terminal's font family, size and line height, and its light/dark/follow-appearance palette. |
-| Statusline | `@gitsang/dsh-statusline` | Keeps the shipped statistics pills and splits model time into first-token wait and decode. |
-| Session tree | `@gitsang/dsh-session-tree` | Adds a Trajectory Tree with git-style branch lanes, treats the branch you opened as the mainline, forks from any durable event, and branches before a Turn when a sent message is edited. |
+### @gitsang/dsh-enter-swap
+
+**Enter key swap.** Enter inserts a newline; Ctrl/Cmd+Enter sends.
+
+### @gitsang/dsh-no-preview-notice
+
+**Skip preview notice.** Skips the versioned preview welcome notice on the new-session page.
+
+### @gitsang/dsh-experimental-auto-review-enhance
+
+**Auto review default.** Sets the experimental Auto review preset as the new-session default from its own Plugins page, with an optional Chinese denial-reason language.
+
+### @gitsang/dsh-reset-terminals
+
+**Reset shell.** `/reset-terminals` plus a composer button that closes persistent PTY sessions before a permission change.
+
+### @gitsang/dsh-sidebar-terminal-enhance
+
+**Terminal.** Sets the sidebar terminal's font family, size and line height, and its light/dark/follow-appearance palette.
+
+### @gitsang/dsh-statusline
+
+**Statusline.** Keeps the shipped statistics pills and splits model time into first-token wait and decode.
+
+### @gitsang/dsh-session-tree
+
+**Session tree.** Adds a Trajectory Tree with git-style branch lanes, treats the branch you opened as the mainline, forks from any durable event, and branches before a Turn when a sent message is edited.
+
+![Trajectory Tree with git-style branch lanes](docs/dsh-session-tree-trajectory-branch-tree.png)
 
 Only `@gitsang/dsh-qol` is installed as a bundle. The seven component packages are dependencies; they deliberately do **not** declare their own `dsh.bundle`. The bundle patch inserts one Loader row per component, so **Plugins → @gitsang/dsh-qol → Components** lists seven independent switches.
 
