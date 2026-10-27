@@ -19,7 +19,8 @@ test('the user action injector mounts from the session header and cleans up its 
 
 test('editing forks before the owning Turn through the Host route', () => {
   assert.match(source, /action: 'edit'/)
-  assert.match(source, /eventSeq: editor\.seq/)
+  assert.match(source, /chatNodeKey: editor\.chatNodeKey/)
+  assert.equal(source.includes('eventSeq: editor.seq'), false)
   assert.match(source, /clientTimeZone: Intl\.DateTimeFormat\(\)\.resolvedOptions\(\)\.timeZone/)
 })
 
@@ -121,4 +122,12 @@ test('turn labels live in their own first column', () => {
   assert.match(source, /grid-template-columns:var\(--dstt-turn-col,56px\) var\(--dstt-event-col,236px\)/)
   assert.match(source, /className: 'dstt-turnCell'[\s\S]*className: 'dstt-turnLabel'/)
   assert.match(source, /className: 'dstt-turnCell'[\s\S]*className: 'dstt-eventCell'/)
+})
+
+test('Chat row identity is forwarded verbatim instead of parsed as a seq', () => {
+  assert.match(source, /function chatNodeKeyFromRow\(row\)/)
+  assert.match(source, /row\?\.getAttribute\?\.\('data-chat-node-key'\)/)
+  assert.match(source, /action: 'fork', sessionId, chatNodeKey/)
+  assert.equal(source.includes('seqFromNodeKey'), false)
+  assert.equal(source.includes('key.split'), false)
 })

@@ -846,12 +846,16 @@ window.__ModuleLoader__.load({
       )
     }
 
-    /** Parse the durable seq prefix the Chat seat puts on every flow row. */
-    function seqFromNodeKey(key) {
-      if (typeof key !== 'string') return null
-      const head = key.split(':', 1)[0]
-      const value = Number(head)
-      return Number.isSafeInteger(value) && value >= 0 ? value : null
+    /**
+     * Read the stable Chat Context key from one rendered flow row.
+     *
+     * The key is `<definition-name-length>:<definition-name><message-id>`; it is
+     * deliberately not a durable Session seq. The Host resolves it against the
+     * complete event log so fork boundaries cannot drift to an unrelated event.
+     */
+    function chatNodeKeyFromRow(row) {
+      const value = row?.getAttribute?.('data-chat-node-key')
+      return typeof value === 'string' && value.length > 0 ? value : null
     }
 
     /** Read the exact user text the host rendered, excluding chrome and attachments. */
@@ -904,13 +908,13 @@ window.__ModuleLoader__.load({
           doc.querySelectorAll('[data-dst-action]').forEach((element) => element.remove())
         }
 
-        const forkAt = async (seq, button) => {
+        const forkAt = async (chatNodeKey, button) => {
           if (busyRef.current) return
           busyRef.current = true
           if (button !== undefined) button.disabled = true
           setError(null)
           try {
-            await mutate({ action: 'fork', sessionId, atSeq: seq })
+            await mutate({ action: 'fork', sessionId, chatNodeKey })
             setToast({ text: t('childCreated'), error: false })
           } catch (forkError) {
             setToast({ text: `${t('requestFailed')}: ${forkError instanceof Error ? forkError.message : String(forkError)}`, error: true })
@@ -920,8 +924,8 @@ window.__ModuleLoader__.load({
           }
         }
 
-        const openEditor = (seq, text) => {
-          setEditor({ seq })
+        const openEditor = (chatNodeKey, text) => {
+          setEditor({ chatNodeKey })
           setDraft(text)
           setError(null)
         }
@@ -933,8 +937,8 @@ window.__ModuleLoader__.load({
           rows.forEach((row) => {
             const actions = row.querySelector('[data-clock="start"]')
             if (actions === null) return
-            const seq = seqFromNodeKey(row.getAttribute('data-chat-node-key'))
-            if (seq === null) return
+            const chatNodeKey = chatNodeKeyFromRow(row)
+            if (chatNodeKey === null) return
             let edit = actions.querySelector('[data-dst-action="edit"]')
             let branch = actions.querySelector('[data-dst-action="branch"]')
             if (edit !== null && branch !== null) return
@@ -949,7 +953,7 @@ window.__ModuleLoader__.load({
               edit.setAttribute('aria-label', t('userEdit'))
               edit.title = t('userEdit')
               edit.disabled = text.trim() === ''
-              edit.addEventListener('click', () => openEditor(seq, messageTextFromRow(row)))
+              edit.addEventListener('click', () => openEditor(chatNodeKey, messageTextFromRow(row)))
             }
             if (branch === null) {
               branch = doc.createElement('button')
@@ -959,7 +963,7 @@ window.__ModuleLoader__.load({
               branch.innerHTML = BRANCH_ICON
               branch.setAttribute('aria-label', t('userFork'))
               branch.title = t('userFork')
-              branch.addEventListener('click', () => { void forkAt(seq, branch) })
+              branch.addEventListener('click', () => { void forkAt(chatNodeKey, branch) })
             }
 
             const copy = actions.querySelector(':scope > button')
@@ -1018,7 +1022,7 @@ window.__ModuleLoader__.load({
           await mutate({
             action: 'edit',
             sessionId,
-            eventSeq: editor.seq,
+            chatNodeKey: editor.chatNodeKey,
             text: draft,
             stopPrevious: true,
             clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -1132,7 +1136,7 @@ window.__ModuleLoader__.load({
       TreeView,
       projectTree,
       UserActionInjector,
-      seqFromNodeKey,
+      chatNodeKeyFromRow,
       messageTextFromRow,
     }
     return module.exports

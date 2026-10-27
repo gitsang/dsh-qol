@@ -3,8 +3,10 @@ import assert from 'node:assert/strict'
 import {
   assembleFamily,
   buildTrajectoryEventIndex,
+  chatNodeKey,
   describeEvent,
   editForkBoundary,
+  eventSeqForChatNodeKey,
   extractOwnEvents,
   forkAfterBoundary,
   lastEventSeq,
@@ -84,6 +86,15 @@ test('extractOwnEvents keeps a root log whole and counts its turns', () => {
   assert.equal(projected.firstOwnSeq, 0)
   assert.equal(projected.ownTurns, 2)
   assert.equal(projected.events.filter((event) => event.role === 'user').length, 2)
+})
+
+
+test('Chat row keys resolve back to the exact durable user-message seq', () => {
+  const events = log()
+  const key = chatNodeKey(events[9])
+  assert.equal(key, '13:input-messagem9')
+  assert.equal(eventSeqForChatNodeKey(events, key), 9)
+  assert.throws(() => eventSeqForChatNodeKey(events, '13:input-messagem999'), /does not resolve/)
 })
 
 test('describeEvent marks context messages as non-editable', () => {

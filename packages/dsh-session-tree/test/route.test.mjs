@@ -20,7 +20,9 @@ function fixture() {
         calls.fork.push(request)
         return { sessionId: 'child-1' }
       },
-      async prompt(request) {
+      async prompt(request, signal) {
+        // The real Session Controller dereferences this lifetime immediately.
+        signal.throwIfAborted()
         calls.prompt.push(request)
         return { accepted: true }
       },
@@ -123,4 +125,39 @@ test('readFamily returns a Trajectory row index only for the requested Session',
   assert.equal(root.eventIndex['user\u0000seq\u00002'].seq, 2)
   assert.equal(child.eventIndex, undefined)
   assert.equal(child.forkAtSeq, 2)
+})
+
+test('edit resolves the Chat row key instead of reading its definition-name length as a seq', async () => {
+  const { ctx, calls } = fixture()
+  const rowKey = '13:input-messagem2'
+  const result = await __test.handlePost(ctx, {
+    action: 'edit',
+    sessionId: 'root',
+    chatNodeKey: rowKey,
+    text: 'edited prompt',
+    stopPrevious: true,
+  })
+  assert.deepEqual(calls.fork, [{ sessionId: 'root', atSeq: 0 }])
+  assert.equal(calls.prompt.length, 1)
+  assert.deepEqual(result, { sessionId: 'child-1', atSeq: 0, action: 'edit' })
+})
+
+test('fork resolves the Chat row key to the selected user event', async () => {
+  const { ctx, calls } = fixture()
+  const result = await __test.handlePost(ctx, {
+    action: 'fork',
+    sessionId: 'root',
+    chatNodeKey: '13:input-messagem2',
+  })
+  assert.deepEqual(calls.fork, [{ sessionId: 'root', atSeq: 2 }])
+  assert.deepEqual(result, { sessionId: 'child-1', atSeq: 2, action: 'fork' })
+})
+
+test('an unknown Chat row key is rejected before any Host mutation', async () => {
+  const { ctx, calls } = fixture()
+  await assert.rejects(
+    __test.handlePost(ctx, { action: 'fork', sessionId: 'root', chatNodeKey: '13:input-messagemissing' }),
+    /does not resolve to a user message event/,
+  )
+  assert.equal(calls.fork.length, 0)
 })

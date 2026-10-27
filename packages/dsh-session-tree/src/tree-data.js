@@ -241,6 +241,49 @@ export function findEvent(events, seq) {
 }
 
 /**
+ * Build the stable Chat Context key for one durable user message.
+ *
+ * The Conversation engine keys an input context as
+ * `<definition-kind-length>:<definition-kind><definition-local-id>` and exposes
+ * that exact key as `data-chat-node-key` on the rendered row. Negotiation
+ * messages use the `input-message` definition, whose local id is the durable
+ * message id. Keeping this conversion on the Host lets the browser pass the
+ * row identity back verbatim instead of guessing a sequence number from it.
+ *
+ * @param {object} event - raw durable Session event.
+ * @returns {string|null} Chat Context key, or null for other events.
+ */
+export function chatNodeKey(event) {
+  if (event?.type !== 'user/message') return null
+  const id = event.data?.id
+  if (typeof id !== 'string' && typeof id !== 'number') return null
+  return `${'input-message'.length}:input-message${String(id)}`
+}
+
+/**
+ * Resolve a Chat `data-chat-node-key` back to its durable event sequence.
+ *
+ * The row key is a Conversation Context key, not a Session seq. Parsing the
+ * digits before `:` as a seq would read the definition-name length instead and
+ * fork from an unrelated early event, so resolution must go through the full
+ * event log.
+ *
+ * @param {readonly object[]} events - complete Session log.
+ * @param {string} key - exact `data-chat-node-key` value.
+ * @returns {number} durable seq of the matching user message.
+ */
+export function eventSeqForChatNodeKey(events, key) {
+  if (typeof key !== 'string' || key.length === 0) throw new TypeError('chatNodeKey must be a non-empty string')
+  for (const event of Array.isArray(events) ? events : []) {
+    if (chatNodeKey(event) === key) {
+      if (!Number.isSafeInteger(event.seq) || event.seq < 0) break
+      return event.seq
+    }
+  }
+  throw new TypeError(`chat node "${key}" does not resolve to a user message event`)
+}
+
+/**
  * Compute the fork boundary immediately before the Turn containing a user
  * message. Native `fork` takes an inclusive prefix, so the boundary is the
  * event before that Turn's `turn/start`.

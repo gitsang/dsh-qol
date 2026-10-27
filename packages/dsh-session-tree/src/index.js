@@ -13,6 +13,7 @@ import {
   assembleFamily,
   buildTrajectoryEventIndex,
   editForkBoundary,
+  eventSeqForChatNodeKey,
   extractOwnEvents,
   forkAfterBoundary,
   lastEventSeq,
@@ -123,6 +124,19 @@ function requiredSeq(value) {
   return value
 }
 
+/**
+ * Resolve an exact durable event boundary from either a numeric seq or the
+ * stable Chat row identity. The latter is what the browser actually has in
+ * hand; it must never be parsed as a seq because it begins with the
+ * Conversation definition-name length.
+ */
+function eventSeqFromRequest(events, body, field) {
+  if (typeof body.chatNodeKey === 'string' && body.chatNodeKey.length > 0) {
+    return eventSeqForChatNodeKey(events, body.chatNodeKey)
+  }
+  return requiredSeq(body[field])
+}
+
 async function readJson(request) {
   const decoder = new TextDecoder()
   let text = ''
@@ -188,13 +202,17 @@ async function inheritModel(ctx, childId, selection) {
 }
 
 async function promptFreshBranch(ctx, childId, text, clientTimeZone) {
+  // The Session Controller facade treats its second argument as the caller
+  // lifetime and dereferences it before delegating. Omitting it leaves the
+  // child forked but never prompts, so pass an explicit live signal.
+  const lifetime = new AbortController()
   await ctx.sessionController.prompt({
     requestId: crypto.randomUUID(),
     sessionId: childId,
     mode: 'queue',
     content: [{ type: 'text', text }],
     ...typeof clientTimeZone === 'string' && clientTimeZone.length > 0 ? { clientTimeZone } : {},
-  })
+  }, lifetime.signal)
 }
 
 async function createBranch(ctx, source, atSeq, body, promptText) {
@@ -243,7 +261,12 @@ async function handlePost(ctx, body) {
   const sessionId = requiredSessionId(body.sessionId)
   if (action === 'activate') return activateSession(ctx, sessionId)
   if (action === 'fork') {
-    const atSeq = body.atSeq === undefined ? undefined : requiredSeq(body.atSeq)
+    const snapshot = typeof body.chatNodeKey === 'string' && body.chatNodeKey.length > 0
+      ? await ctx.sessionQuery.readSession(sessionId)
+      : undefined
+    const atSeq = body.atSeq === undefined && body.chatNodeKey === undefined
+      ? undefined
+      : eventSeqFromRequest(snapshot?.events, body, 'atSeq')
     await stopRunningSession(ctx, sessionId)
     const fork = await ctx.sessionController.fork({ sessionId, ...atSeq === undefined ? {} : { atSeq } })
     return { sessionId: fork.sessionId, atSeq: atSeq ?? null, action }
@@ -251,11 +274,11 @@ async function handlePost(ctx, body) {
   const snapshot = await ctx.sessionQuery.readSession(sessionId)
   if (action === 'edit') {
     if (typeof body.text !== 'string' || body.text.trim() === '') throw new TypeError('text must be a non-empty string')
-    const boundary = editForkBoundary(snapshot.events, requiredSeq(body.eventSeq))
+    const boundary = editForkBoundary(snapshot.events, eventSeqFromRequest(snapshot.events, body, 'eventSeq'))
     return createBranch(ctx, { sessionId, events: snapshot.events }, boundary.atSeq, body, body.text)
   }
   if (action === 'retry') {
-    const boundary = editForkBoundary(snapshot.events, requiredSeq(body.eventSeq))
+    const boundary = editForkBoundary(snapshot.events, eventSeqFromRequest(snapshot.events, body, 'eventSeq'))
     return createBranch(ctx, { sessionId, events: snapshot.events }, boundary.atSeq, body, boundary.userText)
   }
   if (action === 'fork-last') {
