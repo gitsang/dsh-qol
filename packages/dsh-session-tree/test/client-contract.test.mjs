@@ -113,3 +113,12 @@ test('turn labels sit inside the first row of each turn like Trajectory', () => 
   assert.match(source, /turnStart: row\.event\.turn/)
   assert.match(source, /className: 'dstt-turnLabel'/)
 })
+
+
+test('turn labels live in their own first column', () => {
+  assert.match(source, /--dstt-turn-col:56px/)
+  assert.match(source, /className: 'dstt-turnCell'/)
+  assert.match(source, /grid-template-columns:var\(--dstt-turn-col,56px\) var\(--dstt-event-col,236px\)/)
+  assert.match(source, /className: 'dstt-turnCell'[\s\S]*className: 'dstt-turnLabel'/)
+  assert.match(source, /className: 'dstt-turnCell'[\s\S]*className: 'dstt-eventCell'/)
+})

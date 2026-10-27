@@ -6,7 +6,7 @@ A DSH Web component that adds a dedicated **Trajectory Tree** conversation View,
 
 - **Dedicated Trajectory Tree tab** — its own Conversation View beside Chat and Trajectory. It does not inject into or restyle the native Trajectory ledger.
 - **Git-style lanes** — the Session path you are viewing is re-rooted as lane 0 (the main trunk). Every ancestor Session's other forks and its own later events become side lanes, including an explicit `Original mainline` lane when you are viewing a fork. There are no merge edges.
-- **DSH-native visual language** — the same 30px ledger rows, kind pills, borders, and muted colors as Trajectory. The `Turn N` label sits in the top-left corner of the turn's first row, exactly like Trajectory, without a separate divider row.
+- **DSH-native visual language** — the same 30px ledger rows, kind pills, borders, and muted colors as Trajectory. The `Turn N` label has its own narrow first column, so it never overlaps the tree lanes or the kind pill.
 - **Expand / collapse** — a `−/+` node at each side fork folds the whole descendant subtree and reports how many rows are hidden.
 - **Full family** — every Session in the connected family is projected, not only the selected Session's descendants.
 - **Edit a sent message** — the pencil sits beside the Host's own Copy button on every user message. The Host forks from the event immediately before that Turn, then sends the edited prompt into the new Session.
