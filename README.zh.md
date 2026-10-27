@@ -6,35 +6,15 @@
 
 ## 包含的组件
 
-### @gitsang/dsh-enter-swap
-
-**回车键交换。** Enter 换行，Ctrl/Cmd+Enter 发送。
-
-### @gitsang/dsh-no-preview-notice
-
-**跳过预览提示。** 跳过新会话页的版本预览提示。
-
-### @gitsang/dsh-experimental-auto-review-enhance
-
-**Auto review 默认值。** 在组件自己的插件配置页设置实验性的 Auto review 新会话默认值，并可选择中文拒绝理由。
-
-### @gitsang/dsh-reset-terminals
-
-**重置终端。** 提供 `/reset-terminals` 和输入框按钮，在切换权限前关闭持久 PTY 会话。
-
-### @gitsang/dsh-sidebar-terminal-enhance
-
-**终端。** 设置右侧终端的字体族、字号、行高，以及浅色/深色/跟随外观的主体色。
-
-### @gitsang/dsh-statusline
-
-**状态栏。** 保留原统计胶囊，并把模型用时拆成首 token 等待与输出时间。
-
-### @gitsang/dsh-session-tree
-
-**会话树。** 新增「轨迹树」Tab，以 git graph 风格展示整棵会话树，并把当前打开的分支视为主线；可从任意持久事件分叉，也可编辑旧消息后从该轮之前分叉。
-
-![轨迹树：git graph 风格的分支泳道](docs/dsh-session-tree-trajectory-branch-tree.png)
+| 包名 | 作用 | 截图 |
+| --- | --- | --- |
+| `@gitsang/dsh-enter-swap` | Enter 换行，Ctrl/Cmd+Enter 发送。 | |
+| `@gitsang/dsh-no-preview-notice` | 跳过新会话页的版本预览提示。 | |
+| `@gitsang/dsh-experimental-auto-review-enhance` | 在组件自己的插件配置页设置实验性的 Auto review 新会话默认值，并可选择中文拒绝理由。 | |
+| `@gitsang/dsh-reset-terminals` | 提供 `/reset-terminals` 和输入框按钮，在切换权限前关闭持久 PTY 会话。 | |
+| `@gitsang/dsh-sidebar-terminal-enhance` | 设置右侧终端的字体族、字号、行高，以及浅色/深色/跟随外观的主体色。 | |
+| `@gitsang/dsh-statusline` | 保留原统计胶囊，并把模型用时拆成首 token 等待与输出时间。 | |
+| `@gitsang/dsh-session-tree` | 新增「轨迹树」Tab，以 git graph 风格展示整棵会话树，并把当前打开的分支视为主线；可从任意持久事件分叉，也可编辑旧消息后从该轮之前分叉。 | ![轨迹树：git graph 风格的分支泳道](docs/dsh-session-tree-trajectory-branch-tree.png) |
 
 只有 `@gitsang/dsh-qol` 是安装进 profile 的 bundle。七个组件包是它的依赖，并且**刻意不再声明自己的 `dsh.bundle`**。总 bundle 的 patch 为每个组件插入一条 Loader row，所以在 **插件 → @gitsang/dsh-qol → 包含的组件** 里可以看到七个独立开关。
 
