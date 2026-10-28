@@ -138,12 +138,12 @@ test('Chat row identity is forwarded verbatim instead of parsed as a seq', () =>
 
 test('every tree row forks its own Session after its own durable event', () => {
   assert.match(source, /function rowForkRequest\(row\)/)
-  assert.match(source, /const seq = row\?\.event\?\.seq/)
+  assert.match(source, /const seq = rowForkSeq\(row\?\.event\)/)
   assert.match(source, /const sessionId = row\?\.sessionId/)
   assert.match(source, /action: 'fork', sessionId, atSeq: seq/)
   assert.match(source, /await mutate\(request\)/)
   assert.match(source, /onFork: onForkRow/)
-  assert.match(source, /forking: forking\.has\(`\$\{row\.sessionId\}:\$\{row\.event\.seq\}`\)/)
+  assert.match(source, /forking: forking\.has\(`\$\{row\.sessionId\}:\$\{rowForkSeq\(row\.event\)\}`\)/)
   assert.match(source, /data-dst-row-fork/)
   assert.match(source, /row\?\.event\?\.synthetic === true/)
   // The tree never re-derives its boundary from the open Session.
@@ -151,8 +151,37 @@ test('every tree row forks its own Session after its own durable event', () => {
   assert.equal(source.includes("action: 'fork-last'"), false)
 })
 
+test('a folded tool row forks after its result, not after the bare call', () => {
+  // One ledger row stands for the whole exchange, so the copied prefix must
+  // include the result the row displays.
+  assert.match(source, /function rowForkSeq\(event\)/)
+  assert.match(source, /Number\.isSafeInteger\(event\?\.forkSeq\)/)
+  assert.match(source, /return event\?\.seq/)
+})
+
 test('a second click cannot fork twice before the Host answers', () => {
   assert.match(source, /const forkingRef = React\.useRef\(new Set\(\)\)/)
   assert.match(source, /if \(forkingRef\.current\.has\(key\)\) return/)
   assert.match(source, /forkingRef\.current\.delete\(key\)/)
+})
+
+test('tree content is projected like the native Trajectory ledger cell', () => {
+  // The renderer's own Markdown-to-text projection keeps both views identical.
+  assert.match(source, /require\('@deepseek-ai\/dsh-client-ui-primitives'\)/)
+  assert.match(source, /extractMarkdownPlainText/)
+  assert.match(source, /const PREVIEW_SOURCE_CHARS = 2048/)
+  assert.match(source, /const PREVIEW_OUTPUT_CHARS = 512/)
+  assert.match(source, /function previewText/)
+  assert.match(source, /function rowContent/)
+  // Tool calls split name and payload; results read as the arrow tail.
+  assert.match(source, /className: 'dstt-toolName'/)
+  assert.match(source, /className: 'dstt-toolArgs'/)
+  assert.match(source, /className: 'dstt-arrow'/)
+  assert.match(source, /className: 'dstt-resultText'/)
+  assert.match(source, /\.dstt-toolName\{[^}]*font:400 12px\/18px Menlo/)
+  assert.match(source, /\.dstt-toolArgs\{[^}]*font:400 12px\/18px var\(--ds-font-family-code\)/)
+  assert.match(source, /\.dstt-resultText\[data-error\]\{color:var\(--dsw-alias-state-error-primary\)\}/)
+  // The local stripper is only a fallback for hosts without the primitives module.
+  assert.match(source, /function fallbackPlainText/)
+  assert.equal(source.includes("t('noText')"), false)
 })

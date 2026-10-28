@@ -23,7 +23,9 @@ window.__ModuleLoader__.load({
       saving: '处理中…',
       editHint: '编辑后会从这条用户消息所在轮次之前分叉，并发送修改后的内容。',
       noEvents: '没有可显示的事件（只有继承前缀或非展示事件）。',
-      noText: '（无文本）',
+      noOutput: '无输出',
+      toolCallOnly: '（仅工具调用）',
+      toolError: '错误',
       emptyDraft: '消息不能为空。',
       userEdit: '编辑消息',
       userFork: '分叉',
@@ -62,7 +64,9 @@ window.__ModuleLoader__.load({
       saving: 'Working…',
       editHint: 'Editing forks before the Turn containing this user message, then sends the edited prompt.',
       noEvents: 'No displayable events (inherited prefix or non-presentation events only).',
-      noText: '(no text)',
+      noOutput: 'No output',
+      toolCallOnly: '(tool call only)',
+      toolError: 'Error',
       emptyDraft: 'The message cannot be empty.',
       userEdit: 'Edit message',
       userFork: 'Branch',
@@ -153,6 +157,15 @@ window.__ModuleLoader__.load({
       '.dstt-kindTag[data-kind=compacted]{color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-module-platform)}',
       '.dstt-content{display:flex;align-items:center;gap:6px;min-width:0;padding:0 8px;overflow:hidden;font-size:12px;line-height:18px}',
       '.dstt-text{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-primary)}',
+      '.dstt-text[data-muted]{color:var(--dsw-alias-label-tertiary)}',
+      /* Tool calls split like the native Trajectory ledger: name, then payload. */
+      '.dstt-toolName{flex:none;font:400 12px/18px Menlo,Consolas,Liberation Mono,PingFang SC,Microsoft YaHei;color:var(--dsw-alias-label-primary)}',
+      '.dstt-toolArgs{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:400 12px/18px var(--ds-font-family-code);color:var(--dsw-alias-label-secondary)}',
+      /* A tool result reads as the `→ output` tail of its call row. */
+      '.dstt-arrow{flex:none;color:var(--dsw-alias-label-caption);font:400 12px/18px var(--ds-font-family-code)}',
+      '.dstt-resultText{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:400 12px/18px var(--ds-font-family-code);color:var(--dsw-alias-label-secondary)}',
+      '.dstt-resultText[data-error]{color:var(--dsw-alias-state-error-primary)}',
+      '.dstt-resultText[data-muted]{color:var(--dsw-alias-label-caption)}',
       '.dstt-branchChip{display:inline-flex;flex:none;align-items:center;gap:4px;height:17px;padding:0 6px;border:1px solid color-mix(in srgb,var(--dstt-lane-color,var(--dsw-alias-state-business-primary)) 32%,transparent);border-radius:999px;background:color-mix(in srgb,var(--dstt-lane-color,var(--dsw-alias-state-business-primary)) 9%,transparent);color:color-mix(in srgb,var(--dstt-lane-color,var(--dsw-alias-state-business-primary)) 80%,var(--dsw-alias-label-primary));font-size:9.5px;line-height:1;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.dstt-branchChip::before{content:"";width:4px;height:4px;border-radius:50%;background:var(--dstt-lane-color,var(--dsw-alias-state-business-primary));flex:none}',
       '.dstt-forkNote{flex:none;color:var(--dsw-alias-label-tertiary);font-size:9px;font-variant-numeric:tabular-nums}',
@@ -337,6 +350,10 @@ window.__ModuleLoader__.load({
       context: 'context',
       assistant: 'assistant',
       tool: 'tool',
+      // A normal exchange folds into its call row; this keeps the rare orphan
+      // result (the call lives in a Session this row does not display) visible
+      // instead of dropping it.
+      'tool-result': 'tool',
       compaction: 'compacted',
     }
 
@@ -353,19 +370,217 @@ window.__ModuleLoader__.load({
       return TREE_ROLE_KIND[role] ?? 'context'
     }
 
+    /** Trajectory's preview budget: bounded source, bounded one-line output. */
+    const PREVIEW_SOURCE_CHARS = 2048
+    const PREVIEW_OUTPUT_CHARS = 512
+
+    /**
+     * The primitives package carrying the renderer's Markdown-to-text projection.
+     *
+     * It is a static module of the Web shell, so this seed require resolves in
+     * the real client and the tree previews text exactly like the native
+     * Trajectory ledger instead of growing a second Markdown grammar. Unit
+     * tests and non-Web hosts resolve nothing and use the local fallback.
+     */
+    const PRIMITIVES = (() => {
+      try {
+        return require('@deepseek-ai/dsh-client-ui-primitives')
+      } catch {
+        return null
+      }
+    })()
+
+    /**
+     * Project Markdown to plain text with the renderer's own extractor.
+     *
+     * @param {string} markdown - stored Markdown source.
+     * @returns {string} plain text.
+     */
+    function markdownPlainText(markdown) {
+      const extract = PRIMITIVES?.extractMarkdownPlainText
+      return typeof extract === 'function' ? extract(markdown) : fallbackPlainText(markdown)
+    }
+
+    /**
+     * Last-resort Markdown projection for hosts without the primitives module.
+     * It strips the markup that ordinary chat messages use; the renderer's
+     * parser stays authoritative wherever it is available. Deliberately narrow:
+     * an underscore is never treated as emphasis, because tool paths and
+     * identifiers carry them literally.
+     *
+     * @param {string} markdown - stored Markdown source.
+     * @returns {string} plain text.
+     */
+    function fallbackPlainText(markdown) {
+      const value = typeof markdown === 'string' ? markdown : ''
+      return value
+        .replace(/^[ \t]{0,3}#{1,6}[ \t]+/gm, '')
+        .replace(/^[ \t]{0,3}>[ \t]?/gm, '')
+        .replace(/^[ \t]{0,3}(?:[-*+]|\d{1,9}[.)])[ \t]+/gm, '')
+        .replace(/^[ \t]{0,3}(?:```|~~~)[^\n]*$/gm, '')
+        .replace(/`([^`\n]*)`/g, '$1')
+        .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+        .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+        .replace(/\*\*(.+?)\*\*/g, '$1')
+        .replace(/\*([^*\n]+)\*/g, '$1')
+        .replace(/~~(.+?)~~/g, '$1')
+        .replace(/^[ \t]{0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/gm, '')
+    }
+
+    const PREVIEW_CACHE = new Map()
+    const PREVIEW_CACHE_LIMIT = 2048
+
+    /**
+     * Fold one row's stored Markdown into the same bounded single-line preview
+     * the native Trajectory ledger shows.
+     *
+     * @param {unknown} value - stored row text.
+     * @returns {string} one collapsed line, capped like Trajectory.
+     */
+    function previewText(value) {
+      const source = typeof value === 'string' ? value : ''
+      if (source === '') return ''
+      const cached = PREVIEW_CACHE.get(source)
+      if (cached !== undefined) return cached
+      const clipped = source.slice(0, PREVIEW_SOURCE_CHARS)
+      const compact = markdownPlainText(clipped).replace(/\s+/g, ' ').trim()
+      const preview = compact.slice(0, PREVIEW_OUTPUT_CHARS).trimEnd()
+      const text = clipped.length < source.length || preview.length < compact.length ? `${preview}…` : preview
+      PREVIEW_CACHE.set(source, text)
+      if (PREVIEW_CACHE.size > PREVIEW_CACHE_LIMIT) {
+        const oldest = PREVIEW_CACHE.keys().next().value
+        if (typeof oldest === 'string') PREVIEW_CACHE.delete(oldest)
+      }
+      return text
+    }
+
+    /**
+     * Fold one tool result into the `→ output` tail Trajectory shows.
+     *
+     * @param {object|null} result - result attached by the Host projection.
+     * @returns {{tone: 'normal'|'error'|'muted', text: string, title: string}|null}
+     */
+    function resultTail(result) {
+      if (result === null || typeof result !== 'object') return null
+      const detail = previewText(result.text)
+      if (result.isError === true) {
+        const code = typeof result.errorCode === 'string' && result.errorCode !== '' ? result.errorCode : t('toolError')
+        return { tone: 'error', text: code, title: detail === '' ? code : `${code} · ${detail}` }
+      }
+      return detail === ''
+        ? { tone: 'muted', text: t('noOutput'), title: t('noOutput') }
+        : { tone: 'normal', text: detail, title: detail }
+    }
+
+    /**
+     * Decide how one row's content cell renders.
+     *
+     * This mirrors the native Trajectory ledger cell: a tool call splits the
+     * tool name from its argument payload and carries its result as a `→`
+     * tail, a failed result shows the recorded error code, and every text row is
+     * a bounded Markdown preview rather than raw Markdown.
+     *
+     * @param {object} row - projected tree row.
+     * @returns {{kind: string, text: string, title: string, name?: string, args?: string, result?: object|null}}
+     */
+    function rowContent(row) {
+      const event = row?.event ?? {}
+      if (event.role === 'tool') {
+        const name = typeof event.toolName === 'string' && event.toolName !== '' ? event.toolName : 'tool'
+        const args = previewText(event.text)
+        const result = resultTail(event.result)
+        const head = args === '' ? name : `${name} ${args}`
+        return {
+          kind: result !== null && result.tone === 'error' ? 'toolError' : 'tool',
+          name,
+          args,
+          result,
+          text: head,
+          title: result === null ? head : `${head} → ${result.title}`,
+        }
+      }
+      if (event.role === 'tool-result') {
+        const standalone = resultTail(event)
+        if (standalone === null) return { kind: 'emptyResult', text: t('noOutput'), title: t('noOutput') }
+        const kind = standalone.tone === 'error' ? 'error' : standalone.tone === 'muted' ? 'emptyResult' : 'result'
+        return { kind, text: standalone.text, title: standalone.title }
+      }
+      if (event.role === 'assistant' && event.toolCallOnly === true) {
+        return { kind: 'muted', text: t('toolCallOnly'), title: t('toolCallOnly') }
+      }
+      const text = previewText(event.text)
+      return text === ''
+        ? { kind: 'muted', text: '—', title: '' }
+        : { kind: 'text', text, title: text }
+    }
+
+    /** One row's content cell, shaped like the native Trajectory ledger cell. */
+    function RowContent({ row }) {
+      const content = rowContent(row)
+      if (content.kind === 'tool' || content.kind === 'toolError') {
+        return React.createElement(React.Fragment, null,
+          React.createElement('span', { className: 'dstt-toolName', title: content.title }, content.name),
+          content.args === ''
+            ? null
+            : React.createElement('span', { className: 'dstt-toolArgs', title: content.title }, content.args),
+          content.result === null || content.result === undefined
+            ? null
+            : React.createElement(React.Fragment, null,
+                React.createElement('span', { className: 'dstt-arrow', 'aria-hidden': true }, '→'),
+                React.createElement('span', {
+                  className: 'dstt-resultText',
+                  'data-error': content.result.tone === 'error' || undefined,
+                  'data-muted': content.result.tone === 'muted' || undefined,
+                  title: content.result.title,
+                }, content.result.text),
+              ),
+        )
+      }
+      if (content.kind === 'result' || content.kind === 'emptyResult' || content.kind === 'error') {
+        return React.createElement(React.Fragment, null,
+          React.createElement('span', { className: 'dstt-arrow', 'aria-hidden': true }, '→'),
+          React.createElement('span', {
+            className: 'dstt-resultText',
+            'data-error': content.kind === 'error' || undefined,
+            'data-muted': content.kind === 'emptyResult' || undefined,
+            title: content.title,
+          }, content.text),
+        )
+      }
+      return React.createElement('span', {
+        className: 'dstt-text',
+        'data-muted': content.kind === 'muted' || undefined,
+        title: content.title === '' ? undefined : content.title,
+      }, content.text)
+    }
+
+    /**
+     * The durable event a row forks after.
+     *
+     * A tool row stands for a whole call+result exchange, so its boundary is the
+     * result it carries (`forkSeq`) rather than the call that opened it.
+     *
+     * @param {object} event - projected row event.
+     * @returns {number|undefined} inclusive seq, or undefined when none.
+     */
+    function rowForkSeq(event) {
+      if (Number.isSafeInteger(event?.forkSeq) && event.forkSeq >= 0) return event.forkSeq
+      return event?.seq
+    }
+
     /**
      * Build the Host fork request for one tree row.
      *
      * The row's own Session is authoritative: ancestor Sessions are interleaved
      * into the trunk and side lanes, so forking the open Session would cut the
-     * wrong log. The boundary is that row's durable seq, taken inclusively, so
-     * the new branch starts right after the event the user pointed at.
+     * wrong log. The boundary is that row's last durable seq, taken inclusively,
+     * so the new branch starts right after the event the user pointed at.
      *
      * @param {object} row - projected tree row.
      * @returns {{action: 'fork', sessionId: string, atSeq: number}|null} null when the row owns no durable event.
      */
     function rowForkRequest(row) {
-      const seq = row?.event?.seq
+      const seq = rowForkSeq(row?.event)
       const sessionId = row?.sessionId
       if (row?.event?.synthetic === true) return null
       if (typeof sessionId !== 'string' || sessionId.length === 0) return null
@@ -504,9 +719,9 @@ window.__ModuleLoader__.load({
 
       /**
        * Render the selected Session path as lane 0. When the path leaves a
-       * Session at a fork, that Session's later events become the
-       * "original mainline" side branch, even though it remains the parent in
-       * DSH's persistent Session graph.
+       * Session at a fork, that Session's own later events become a side lane
+       * labelled by its own title, even though it remains the parent in DSH's
+       * persistent Session graph.
        */
       const buildMainline = (sessionId, inheritedAnchorRow = null) => {
         const events = eventsFor(sessionId)
@@ -767,7 +982,7 @@ window.__ModuleLoader__.load({
       const request = rowForkRequest(row)
       const unavailable = request === null
       const busy = forking === true
-      const forkLabel = unavailable ? t('rowForkUnavailable') : `${t('rowFork')} (#${row.event.seq})`
+      const forkLabel = unavailable ? t('rowForkUnavailable') : `${t('rowFork')} (#${rowForkSeq(row.event)})`
       return React.createElement('div', {
         className: 'dstt-row',
         'data-branch-session': row.sessionId,
@@ -800,8 +1015,7 @@ window.__ModuleLoader__.load({
           row.branchStart && Number.isSafeInteger(row.branchForkAt)
             ? React.createElement('span', { className: 'dstt-forkNote' }, t('forkAt', { seq: row.branchForkAt }))
             : null,
-          React.createElement('span', { className: 'dstt-text', title: row.event.text },
-            row.event.text === '' ? t('noText') : row.event.text),
+          React.createElement(RowContent, { row }),
           row.collapsed && row.hiddenCount > 0
             ? React.createElement('span', { className: 'dstt-hiddenNote' }, t('branchMore', { count: row.hiddenCount }))
             : null,
@@ -938,7 +1152,7 @@ window.__ModuleLoader__.load({
                 lastByLane: projection.lastByLane,
                 onToggle,
                 onFork: onForkRow,
-                forking: forking.has(`${row.sessionId}:${row.event.seq}`),
+                forking: forking.has(`${row.sessionId}:${rowForkSeq(row.event)}`),
               })),
         ),
         notice,
@@ -1234,7 +1448,12 @@ window.__ModuleLoader__.load({
     exports.__test = {
       TreeView,
       TreeRow,
+      RowContent,
       projectTree,
+      rowContent,
+      previewText,
+      markdownPlainText,
+      fallbackPlainText,
       rowForkRequest,
       makeMutation,
       UserActionInjector,

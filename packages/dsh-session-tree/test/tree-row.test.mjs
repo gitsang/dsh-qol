@@ -210,3 +210,126 @@ test('every lane is labelled by its own Session title and none claims the mainli
   assert.deepEqual(titles('right').sort(), ['Left', 'Root'])
   assert.deepEqual(titles('root').sort(), ['Left', 'Right'])
 })
+
+test('a tool row renders its name and payload apart, like the Trajectory ledger', () => {
+  const html = renderRow(rowFixture({
+    event: { seq: 18, role: 'tool', toolName: 'bash', text: '{"command":"pwd && ls"}', turn: 1 },
+  }))
+  assert.match(html, /class="dstt-toolName"[^>]*>bash</)
+  assert.match(html, /class="dstt-toolArgs"[^>]*>\{&quot;command&quot;:&quot;pwd &amp;&amp; ls&quot;\}</)
+  assert.equal(html.includes('bash({'), false)
+  assert.match(html, /title="bash \{&quot;command&quot;:&quot;pwd &amp;&amp; ls&quot;\}"/)
+})
+
+test('a tool result reads as the arrow tail of its call', () => {
+  const html = renderRow(rowFixture({ event: { seq: 19, role: 'tool-result', text: 'done', turn: 1 } }))
+  assert.match(html, /class="dstt-arrow"[^>]*>→</)
+  assert.match(html, /class="dstt-resultText"[^>]*>done</)
+})
+
+test('a failed tool result shows the recorded error code in the error tone', () => {
+  const html = renderRow(rowFixture({
+    event: { seq: 396, role: 'tool-result', text: 'file changed since it was read', isError: true, errorCode: 'FS_STALE_VERSION', turn: 2 },
+  }))
+  assert.match(html, /class="dstt-resultText" data-error="true"/)
+  assert.match(html, />FS_STALE_VERSION</)
+  assert.match(html, /title="FS_STALE_VERSION · file changed since it was read"/)
+})
+
+test('a tool result without output is labelled, not left blank', () => {
+  const html = renderRow(rowFixture({ event: { seq: 20, role: 'tool-result', text: '', turn: 1 } }))
+  assert.match(html, /No output/)
+  assert.match(html, /data-muted="true"/)
+})
+
+test('a tool-call-only assistant row is labelled like Trajectory', () => {
+  const html = renderRow(rowFixture({
+    event: { seq: 21, role: 'assistant', text: '', toolCallOnly: true, toolCallCount: 2, turn: 1 },
+  }))
+  assert.match(html, /\(tool call only\)/)
+  assert.match(html, /data-muted="true"/)
+})
+
+test('text rows preview rendered Markdown instead of raw Markdown', () => {
+  const html = renderRow(rowFixture({
+    event: {
+      seq: 22,
+      role: 'user',
+      text: '## 标题\n**加粗** 与 `code` 和 [链接](https://example.com)\n- 列表',
+      turn: 1,
+    },
+  }))
+  assert.match(html, /标题 加粗 与 code 和 链接 列表/)
+  assert.equal(html.includes('**'), false)
+  assert.equal(html.includes('](https://example.com)'), false)
+})
+
+test('previews are bounded like the native Trajectory ledger', () => {
+  const text = __test.previewText('a'.repeat(900))
+  assert.equal(text.length, 513)
+  assert.ok(text.endsWith('…'))
+  assert.equal(__test.previewText(''), '')
+  // The second call takes the memoized preview.
+  assert.equal(__test.previewText('a'.repeat(900)), text)
+})
+
+test('rowContent classifies rows the way the Trajectory content cell does', () => {
+  assert.equal(__test.rowContent({ event: { role: 'tool', toolName: 'read', text: '{"file_path":"/a"}' } }).kind, 'tool')
+  assert.equal(__test.rowContent({ event: { role: 'tool-result', text: 'ok' } }).kind, 'result')
+  assert.equal(__test.rowContent({ event: { role: 'tool-result', text: '' } }).kind, 'emptyResult')
+  assert.equal(__test.rowContent({ event: { role: 'tool-result', text: 'x', isError: true } }).kind, 'error')
+  assert.equal(__test.rowContent({ event: { role: 'assistant', text: '', toolCallOnly: true } }).kind, 'muted')
+  assert.equal(__test.rowContent({ event: { role: 'context', text: '' } }).text, '—')
+})
+
+test('a folded tool row shows its result on the same line', () => {
+  const html = renderRow(rowFixture({
+    event: {
+      seq: 18,
+      role: 'tool',
+      toolName: 'bash',
+      text: '{"command":"ls"}',
+      forkSeq: 19,
+      result: { seq: 19, text: 'a.txt', isError: false, errorCode: null },
+      turn: 1,
+    },
+  }))
+  assert.match(html, /class="dstt-toolName"[^>]*>bash</)
+  assert.match(html, /class="dstt-toolArgs"/)
+  assert.match(html, /class="dstt-arrow"[^>]*>→</)
+  assert.match(html, /class="dstt-resultText"[^>]*>a.txt</)
+  // The label and the request both name the end of the exchange.
+  assert.match(html, /data-fork-seq="19"/)
+  assert.match(html, /Fork after this event \(#19\)/)
+})
+
+test('a folded failed tool row keeps the error tone and code', () => {
+  const html = renderRow(rowFixture({
+    event: {
+      seq: 30,
+      role: 'tool',
+      toolName: 'read',
+      text: '{"file_path":"/a"}',
+      forkSeq: 31,
+      result: { seq: 31, text: 'no such file', isError: true, errorCode: 'ENOENT' },
+      turn: 1,
+    },
+  }))
+  assert.match(html, /data-error="true"[^>]*>ENOENT</)
+  assert.match(html, /title="read \{&quot;file_path&quot;:&quot;\/a&quot;\} → ENOENT · no such file"/)
+})
+
+test('a folded tool row without output is labelled like Trajectory', () => {
+  const html = renderRow(rowFixture({
+    event: {
+      seq: 40,
+      role: 'tool',
+      toolName: 'bash',
+      text: '{}',
+      forkSeq: 41,
+      result: { seq: 41, text: '', isError: false, errorCode: null },
+      turn: 1,
+    },
+  }))
+  assert.match(html, /No output/)
+})

@@ -14,7 +14,7 @@ A quality-of-life bundle for [DeepSeek Harness](https://github.com/deepseek-ai/d
 | `@gitsang/dsh-reset-terminals` | `/reset-terminals` plus a composer button that closes persistent PTY sessions before a permission change. | |
 | `@gitsang/dsh-sidebar-terminal-enhance` | Sets the sidebar terminal's font family, size and line height, and its light/dark/follow-appearance palette. | |
 | `@gitsang/dsh-statusline` | Keeps the shipped statistics pills and splits model time into first-token wait and decode. | |
-| `@gitsang/dsh-session-tree` | Adds a Trajectory Tree with git-style branch lanes, treats the branch you opened as the mainline, forks from any durable event, and branches before a Turn when a sent message is edited. | ![Trajectory Tree with git-style branch lanes](docs/dsh-session-tree-trajectory-branch-tree.png) |
+| `@gitsang/dsh-session-tree` | Adds a Trajectory Tree with git-style branch lanes, re-roots the branch you opened as lane 0, renders rows like the native Trajectory ledger, forks from any durable event, and branches before a Turn when a sent message is edited. | ![Trajectory Tree with git-style branch lanes](docs/dsh-session-tree-trajectory-branch-tree.png) |
 
 Only `@gitsang/dsh-qol` is installed as a bundle. The seven component packages are dependencies; they deliberately do **not** declare their own `dsh.bundle`. The bundle patch inserts one Loader row per component, so **Plugins → @gitsang/dsh-qol → Components** lists seven independent switches.
 

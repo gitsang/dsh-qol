@@ -26,27 +26,55 @@ export function textFromContent(content) {
     .join('\n')
 }
 
-/** Clip a display preview without changing the stored message. */
-export function clip(text, max = 220) {
-  const value = typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : ''
+/**
+ * Longest Markdown source carried per row to the browser.
+ *
+ * The browser folds this source into the same bounded single-line preview the
+ * native Trajectory ledger shows, so the Host keeps the original Markdown
+ * instead of pre-collapsing it: a list or code block must still parse as such
+ * on the other side. The cap only bounds the route payload for a large family.
+ */
+export const ROW_TEXT_CHARS = 600
+
+/**
+ * Bound one row's stored text while keeping its Markdown structure.
+ * @param {unknown} text - raw message, argument, or result text.
+ * @param {number} max - maximum stored characters.
+ * @returns {string} the text, ending in an ellipsis when it was cut.
+ */
+export function previewSource(text, max = ROW_TEXT_CHARS) {
+  const value = typeof text === 'string' ? text : ''
   return value.length <= max ? value : `${value.slice(0, Math.max(0, max - 1))}…`
 }
 
-/** Describe one tool argument payload without assuming it is valid JSON. */
-function toolCallText(data) {
-  const name = typeof data?.name === 'string' ? data.name : 'tool'
-  const raw = typeof data?.arguments === 'string' ? data.arguments : ''
-  return raw === '' ? name : `${name}(${clip(raw, 120)})`
+/** Join every reasoning block; Trajectory falls back to it when a message has no text. */
+export function reasoningFromContent(content) {
+  if (!Array.isArray(content)) return ''
+  return content
+    .filter((part) => part !== null && typeof part === 'object' && part.type === 'reasoning')
+    .map((part) => typeof part.text === 'string' ? part.text : '')
+    .join('\n')
 }
 
-/** Extract assistant text plus a compact marker for non-text blocks. */
-function assistantText(blocks) {
-  if (!Array.isArray(blocks)) return ''
-  const text = textFromContent(blocks)
-  const calls = blocks
-    .filter((block) => block !== null && typeof block === 'object' && block.type === 'tool-call')
-    .map((block) => `${block.name ?? 'tool'}(${clip(typeof block.argsRaw === 'string' ? block.argsRaw : '', 70)})`)
-  return [text, ...calls].filter((part) => part !== '').join('\n')
+/** Read the raw argument payload of one tool call event, whatever the field name. */
+function toolCallArguments(data) {
+  if (typeof data?.arguments === 'string') return data.arguments
+  if (typeof data?.argsRaw === 'string') return data.argsRaw
+  return ''
+}
+
+/** Read the recorded call id from either half of a tool exchange. */
+function toolCallId(event) {
+  const candidates = [
+    event?.data?.callId,
+    event?.data?.toolCallId,
+    event?.data?.message?.toolCallId,
+    event?.data?.message?.source?.callId,
+  ]
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.length > 0) return value
+  }
+  return null
 }
 
 /**
@@ -71,30 +99,50 @@ export function describeEvent(event, cursor) {
       return {
         ...base,
         role: sourceKind === 'user' ? 'user' : 'context',
-        text: clip(text),
+        text: previewSource(text),
         messageId: event.data?.id,
         sourceKind,
         editable: sourceKind === 'user' && text.trim() !== '',
       }
     }
-    case 'assistant/message':
+    case 'assistant/message': {
+      const blocks = event.data?.message?.content
+      // A message that only calls tools has no answer text. Trajectory labels
+      // that state instead of printing the call names, which already own their
+      // own rows; thinking is the same fallback Trajectory previews.
+      const text = textFromContent(blocks) || reasoningFromContent(blocks)
+      const toolCallCount = Array.isArray(blocks)
+        ? blocks.filter((block) => block !== null && typeof block === 'object' && block.type === 'tool-call').length
+        : 0
       return {
         ...base,
         role: 'assistant',
-        text: clip(assistantText(event.data?.message?.content)),
+        text: previewSource(text),
+        toolCallCount,
+        toolCallOnly: text.trim() === '' && toolCallCount > 0,
       }
-    case 'tool/call':
+    }
+    case 'tool/call': {
+      const name = typeof event.data?.name === 'string' && event.data.name !== '' ? event.data.name : 'tool'
       return {
         ...base,
         role: 'tool',
-        text: clip(toolCallText(event.data)),
+        toolName: name,
+        // Trajectory previews the raw argument payload beside the tool name.
+        text: previewSource(toolCallArguments(event.data)),
       }
-    case 'tool/result':
+    }
+    case 'tool/result': {
+      const message = event.data?.message
+      const errorCode = event.data?.error?.code ?? message?.error?.code
       return {
         ...base,
         role: 'tool-result',
-        text: clip(textFromContent(event.data?.message?.content)),
+        text: previewSource(textFromContent(message?.content)),
+        isError: message?.isError === true || event.data?.isError === true,
+        errorCode: typeof errorCode === 'string' && errorCode !== '' ? errorCode : null,
       }
+    }
     case 'turn/end':
       return {
         ...base,
@@ -111,7 +159,7 @@ export function describeEvent(event, cursor) {
       return {
         ...base,
         role: 'compaction',
-        text: clip(textFromContent(event.data?.message?.content) || event.data?.summary || ''),
+        text: previewSource(textFromContent(event.data?.message?.content) || event.data?.summary || ''),
       }
     default:
       return null
@@ -208,6 +256,8 @@ export function extractOwnEvents(events, inheritedEventCount = 0) {
   let step = null
   let ownTurns = 0
   let firstOwnSeq = null
+  /** Tool calls awaiting their result, keyed by the recorded call id. */
+  const pendingCalls = new Map()
   const inherited = Math.max(0, Number.isSafeInteger(inheritedEventCount) ? inheritedEventCount : 0)
   for (const event of Array.isArray(events) ? events : []) {
     if (event === null || typeof event !== 'object') continue
@@ -225,7 +275,34 @@ export function extractOwnEvents(events, inheritedEventCount = 0) {
     if (firstOwnSeq === null) firstOwnSeq = event.seq
     if (!VISIBLE_EVENT_TYPES.has(event.type)) continue
     const row = describeEvent(event, { turn, step })
-    if (row !== null) rows.push(row)
+    if (row === null) continue
+    // The native Trajectory ledger draws one line per tool call and appends its
+    // result as the `→ output` tail of that same line. Folding here keeps both
+    // views reading one call+result exchange as one record, and the row's fork
+    // boundary becomes the end of that exchange instead of its beginning: a
+    // branch cut before the result would start with a dangling call that the
+    // Host has to pad with a synthetic result.
+    if (row.role === 'tool') {
+      const callId = toolCallId(event)
+      if (callId !== null) pendingCalls.set(callId, row)
+    } else if (row.role === 'tool-result') {
+      const callId = toolCallId(event)
+      const call = callId === null ? undefined : pendingCalls.get(callId)
+      if (call !== undefined) {
+        call.result = {
+          seq: row.seq,
+          text: row.text,
+          isError: row.isError === true,
+          errorCode: row.errorCode ?? null,
+        }
+        // The row stands for the whole exchange; forking after it keeps the
+        // result inside the copied prefix.
+        if (Number.isSafeInteger(row.seq)) call.forkSeq = row.seq
+        pendingCalls.delete(callId)
+        continue
+      }
+    }
+    rows.push(row)
   }
   return {
     events: rows,
