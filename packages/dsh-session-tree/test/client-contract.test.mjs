@@ -86,13 +86,17 @@ test('fork edges leave the shared parent point and descend in the child lane', (
   assert.match(source, /pendingBranchEdges/)
 })
 
-test('a selected branch makes the old mainline continuation a side lane', () => {
+test('a selected branch renders the parent Session later events as a plain side lane', () => {
   assert.match(source, /const pathChildId = pathNext\.get\(sessionId\)/)
   assert.match(source, /isContinuation: true/)
   assert.match(source, /excludeChildren: new Set\(\[pathChildId\]\)/)
-  assert.match(source, /t\('continuation'\)/)
-  assert.match(source, /Original mainline/)
-  assert.match(source, /原主线继续/)
+  // No lane is labelled as a mainline: the opened branch is lane 0 and every
+  // side lane is identified by its own Session title alone.
+  assert.match(source, /branchTitle: sessionTitle\(list, sessionId\),\n\s+branchId: `\$\{sessionId\}@continuation/)
+  assert.equal(source.includes("t('continuation')"), false)
+  assert.equal(source.includes('Original mainline'), false)
+  assert.equal(source.includes('原主线继续'), false)
+  assert.equal(source.includes('continuation:'), false)
 })
 
 test('the conversation tab is now labelled 轨迹树 / Trajectory Tree', () => {

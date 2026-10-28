@@ -126,9 +126,9 @@ test('a row fork posts the owning Session and seq, then opens the child', async 
   }
 })
 
-test('a continuation-lane row forks its ancestor even when it shares a seq with the trunk', () => {
-  // root seq 3 continues as the "original mainline" lane while the opened child
-  // owns its own seq 3. Same number, different Session: the row decides.
+test('a parent-continuation row forks its ancestor even when it shares a seq with the trunk', () => {
+  // root seq 3 continues on a side lane while the opened child owns its own
+  // seq 3. Same number, different Session: the row decides.
   const data = {
     sessions: [
       {
@@ -156,9 +156,13 @@ test('a continuation-lane row forks its ancestor even when it shares a seq with 
   const list = { byId: { root: { displayTitle: 'Root' }, child: { displayTitle: 'Child' } } }
   const projection = __test.projectTree(data, 'child', new Set(), list)
   const continuation = projection.rows.filter((row) => row.isContinuation === true)
-  assert.ok(continuation.length > 0, 'the old mainline continues on a side lane')
+  assert.ok(continuation.length > 0, 'the parent Session continues on a side lane')
   for (const row of continuation) {
     assert.equal(row.sessionId, 'root')
+    // The lane is labelled by its own Session title, never as "the mainline":
+    // any branch can be opened and becomes lane 0.
+    assert.equal(row.branchTitle, 'Root')
+    assert.equal(row.isMainline, false)
     assert.deepEqual(__test.rowForkRequest(row), { action: 'fork', sessionId: 'root', atSeq: row.event.seq })
   }
   const trunk = projection.rows.filter((row) => row.lane === 0)
@@ -166,4 +170,43 @@ test('a continuation-lane row forks its ancestor even when it shares a seq with 
     __test.rowForkRequest(trunk.find((row) => row.event.seq === 3)),
     { action: 'fork', sessionId: 'child', atSeq: 3 },
   )
+})
+
+test('every lane is labelled by its own Session title and none claims the mainline', () => {
+  const data = {
+    sessions: [
+      {
+        sessionId: 'root',
+        parentSessionId: null,
+        createdAt: 1,
+        events: [
+          { seq: 1, role: 'user', turn: 1 },
+          { seq: 2, role: 'assistant', turn: 1 },
+        ],
+      },
+      {
+        sessionId: 'left',
+        parentSessionId: 'root',
+        forkAtSeq: 1,
+        createdAt: 2,
+        events: [{ seq: 2, role: 'user', turn: 2 }],
+      },
+      {
+        sessionId: 'right',
+        parentSessionId: 'root',
+        forkAtSeq: 1,
+        createdAt: 3,
+        events: [{ seq: 2, role: 'user', turn: 2 }],
+      },
+    ],
+  }
+  const list = { byId: { root: { displayTitle: 'Root' }, left: { displayTitle: 'Left' }, right: { displayTitle: 'Right' } } }
+  const titles = (sessionId) => {
+    const rows = __test.projectTree(data, sessionId, new Set(), list).rows
+    return rows.filter((row) => row.branchStart).map((row) => row.branchTitle)
+  }
+  // Each lane names its own Session; re-rooting only changes which lane is 0.
+  assert.deepEqual(titles('left').sort(), ['Right', 'Root'])
+  assert.deepEqual(titles('right').sort(), ['Left', 'Root'])
+  assert.deepEqual(titles('root').sort(), ['Left', 'Right'])
 })

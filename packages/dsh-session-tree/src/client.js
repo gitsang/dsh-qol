@@ -35,7 +35,6 @@ window.__ModuleLoader__.load({
       branchCollapse: '收起分支',
       branchExpand: '展开分支',
       branchMore: '还有 {count} 条',
-      continuation: '原主线继续',
       tab: '轨迹树',
       treeTitle: '轨迹树',
       treeSubtitle: '{count} 个分支 · 当前 {current}',
@@ -75,7 +74,6 @@ window.__ModuleLoader__.load({
       branchCollapse: 'Collapse branch',
       branchExpand: 'Expand branch',
       branchMore: '{count} more',
-      continuation: 'Original mainline',
       tab: 'Trajectory Tree',
       treeTitle: 'Trajectory tree',
       treeSubtitle: '{count} branches · current {current}',
@@ -440,8 +438,9 @@ window.__ModuleLoader__.load({
 
       /**
        * Render one side branch, its own events and every descendant fork.
-       * `startIndex` is used by the original-mainline continuation, which starts
-       * after the fork event instead of replaying the whole Session.
+       * `startIndex` is used by the lane that continues an ancestor Session
+       * after the fork point, which starts there instead of replaying the
+       * whole Session.
        */
       const buildSide = (sessionId, lane, options = {}) => {
         const startIndex = options.startIndex ?? 0
@@ -585,8 +584,9 @@ window.__ModuleLoader__.load({
           output.push(...childRows)
         }
 
-        // Everything this Session did after the selected fork is the original
-        // mainline continuing on a side lane.
+        // Everything this Session did after the selected fork is just another
+        // side lane. It is the same Session as the trunk above it, so it is
+        // identified by that Session's own title — no lane is a "mainline".
         if (mainlineEnd + 1 < events.length) {
           const continuationLane = allocateLane()
           const continuationRows = buildSide(sessionId, continuationLane, {
@@ -595,11 +595,11 @@ window.__ModuleLoader__.load({
             parentLane: 0,
             forkAnchorRow: anchorRow,
             branchForkAt: pathChild?.forkAtSeq,
-            branchTitle: `${t('continuation')} · ${sessionTitle(list, sessionId)}`,
+            branchTitle: sessionTitle(list, sessionId),
             branchId: `${sessionId}@continuation${mainlineEnd + 1}`,
             isContinuation: true,
             // The selected path child already occupies lane 0; never replay it
-            // under the original-mainline continuation lane.
+            // under this lane.
             excludeChildren: new Set([pathChildId]),
           })
           output.push(...continuationRows)
