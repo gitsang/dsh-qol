@@ -131,3 +131,24 @@ test('Chat row identity is forwarded verbatim instead of parsed as a seq', () =>
   assert.equal(source.includes('seqFromNodeKey'), false)
   assert.equal(source.includes('key.split'), false)
 })
+
+test('every tree row forks its own Session after its own durable event', () => {
+  assert.match(source, /function rowForkRequest\(row\)/)
+  assert.match(source, /const seq = row\?\.event\?\.seq/)
+  assert.match(source, /const sessionId = row\?\.sessionId/)
+  assert.match(source, /action: 'fork', sessionId, atSeq: seq/)
+  assert.match(source, /await mutate\(request\)/)
+  assert.match(source, /onFork: onForkRow/)
+  assert.match(source, /forking: forking\.has\(`\$\{row\.sessionId\}:\$\{row\.event\.seq\}`\)/)
+  assert.match(source, /data-dst-row-fork/)
+  assert.match(source, /row\?\.event\?\.synthetic === true/)
+  // The tree never re-derives its boundary from the open Session.
+  assert.equal(source.includes("mutate({ action: 'fork', sessionId }"), false)
+  assert.equal(source.includes("action: 'fork-last'"), false)
+})
+
+test('a second click cannot fork twice before the Host answers', () => {
+  assert.match(source, /const forkingRef = React\.useRef\(new Set\(\)\)/)
+  assert.match(source, /if \(forkingRef\.current\.has\(key\)\) return/)
+  assert.match(source, /forkingRef\.current\.delete\(key\)/)
+})

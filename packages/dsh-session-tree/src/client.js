@@ -27,6 +27,8 @@ window.__ModuleLoader__.load({
       emptyDraft: '消息不能为空。',
       userEdit: '编辑消息',
       userFork: '分叉',
+      rowFork: '从此后分叉',
+      rowForkUnavailable: '这一行没有可用来分叉的持久事件',
       editTitle: '编辑这条消息',
       childCreated: '已创建新分支',
       requestFailed: '请求失败',
@@ -65,6 +67,8 @@ window.__ModuleLoader__.load({
       emptyDraft: 'The message cannot be empty.',
       userEdit: 'Edit message',
       userFork: 'Branch',
+      rowFork: 'Fork after this event',
+      rowForkUnavailable: 'This row has no durable event to fork from',
       editTitle: 'Edit this message',
       childCreated: 'New branch created',
       requestFailed: 'Request failed',
@@ -155,6 +159,13 @@ window.__ModuleLoader__.load({
       '.dstt-branchChip::before{content:"";width:4px;height:4px;border-radius:50%;background:var(--dstt-lane-color,var(--dsw-alias-state-business-primary));flex:none}',
       '.dstt-forkNote{flex:none;color:var(--dsw-alias-label-tertiary);font-size:9px;font-variant-numeric:tabular-nums}',
       '.dstt-hiddenNote{flex:none;margin-left:auto;color:var(--dsw-alias-label-tertiary);font-size:9.5px}',
+      '.dstt-rowAction{flex:none;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;padding:2px;border:0;border-radius:4px;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;opacity:.42;transition:opacity 120ms var(--ds-ease-in-out),background-color 120ms var(--ds-ease-in-out)}',
+      '.dstt-row:hover .dstt-rowAction,.dstt-row:focus-within .dstt-rowAction,.dstt-rowAction:focus-visible{opacity:1}',
+      '.dstt-rowAction:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
+      '.dstt-rowAction:disabled{cursor:default;opacity:.14}',
+      '.dstt-row:hover .dstt-rowAction:disabled{opacity:.24}',
+      '.dstt-rowAction[data-busy]{opacity:.55;cursor:progress}',
+      '.dstt-rowAction svg{display:block;width:13px;height:13px}',
       '.dstt-turnCell{display:flex;align-items:flex-start;justify-content:flex-end;min-width:0;padding:2px 6px 0 0;overflow:hidden}',
       '.dstt-turnLabel{display:block;max-width:100%;padding:1px 4px;border-radius:2px;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-tertiary);font:8px/10px var(--ds-font-family-code);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;user-select:none}',
       '.dstt-empty{display:flex;align-items:center;justify-content:center;height:100%;padding:24px;color:var(--dsw-alias-label-tertiary);font-size:12px;text-align:center}',
@@ -345,6 +356,26 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Build the Host fork request for one tree row.
+     *
+     * The row's own Session is authoritative: ancestor Sessions are interleaved
+     * into the trunk and side lanes, so forking the open Session would cut the
+     * wrong log. The boundary is that row's durable seq, taken inclusively, so
+     * the new branch starts right after the event the user pointed at.
+     *
+     * @param {object} row - projected tree row.
+     * @returns {{action: 'fork', sessionId: string, atSeq: number}|null} null when the row owns no durable event.
+     */
+    function rowForkRequest(row) {
+      const seq = row?.event?.seq
+      const sessionId = row?.sessionId
+      if (row?.event?.synthetic === true) return null
+      if (typeof sessionId !== 'string' || sessionId.length === 0) return null
+      if (!Number.isSafeInteger(seq) || seq < 0) return null
+      return { action: 'fork', sessionId, atSeq: seq }
+    }
+
+    /**
      * Project the current Session and every descendant fork into one ordered
      * ledger. The current Session is lane 0; every descendant gets its own lane
      * (pre-order), so no two branches ever share a column.
@@ -418,7 +449,7 @@ window.__ModuleLoader__.load({
         const branchId = options.branchId ?? sessionId
         const excluded = options.excludeChildren ?? new Set()
         const shown = events.length === 0
-          ? [{ seq: Number.isSafeInteger(byId.get(sessionId)?.forkAtSeq) ? byId.get(sessionId).forkAtSeq : 0, role: 'context', text: '', turn: null }]
+          ? [{ seq: Number.isSafeInteger(byId.get(sessionId)?.forkAtSeq) ? byId.get(sessionId).forkAtSeq : 0, role: 'context', text: '', turn: null, synthetic: true }]
           : events.slice(startIndex)
         if (shown.length === 0) return []
         const childIds = childrenOf(sessionId).filter((childId) => !excluded.has(childId))
@@ -730,9 +761,13 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function TreeRow({ row, maxLane, firstByLane, lastByLane, onToggle }) {
+    function TreeRow({ row, maxLane, firstByLane, lastByLane, onToggle, onFork, forking }) {
       const color = treeLaneColor(row.lane)
       const graph = TreeGraph({ row, maxLane, firstByLane, lastByLane, onToggle })
+      const request = rowForkRequest(row)
+      const unavailable = request === null
+      const busy = forking === true
+      const forkLabel = unavailable ? t('rowForkUnavailable') : `${t('rowFork')} (#${row.event.seq})`
       return React.createElement('div', {
         className: 'dstt-row',
         'data-branch-session': row.sessionId,
@@ -770,18 +805,51 @@ window.__ModuleLoader__.load({
           row.collapsed && row.hiddenCount > 0
             ? React.createElement('span', { className: 'dstt-hiddenNote' }, t('branchMore', { count: row.hiddenCount }))
             : null,
+          // Every row owns one durable event, so the branch boundary is that
+          // exact seq in that row's own Session — never the open Session.
+          React.createElement('button', {
+            type: 'button',
+            className: 'dstt-rowAction',
+            'data-dst-row-fork': unavailable ? undefined : 'true',
+            'data-fork-session': unavailable ? undefined : request.sessionId,
+            'data-fork-seq': unavailable ? undefined : String(request.atSeq),
+            'data-busy': busy || undefined,
+            title: forkLabel,
+            'aria-label': forkLabel,
+            disabled: unavailable || busy,
+            onClick: (event) => {
+              event.stopPropagation()
+              if (unavailable || busy) return
+              onFork(row)
+            },
+            dangerouslySetInnerHTML: { __html: BRANCH_ICON },
+          }),
         ),
       )
     }
 
     function TreeView(props) {
       const sessionId = props.sessionId
-      const list = useSessionList(props.sessions)
+      const sessions = props.sessions
+      const uiWorkspace = props.uiWorkspace
+      const list = useSessionList(sessions)
       const tree = useTree(sessionId, true)
+      const mutate = React.useMemo(() => makeMutation(sessions, uiWorkspace), [sessions, uiWorkspace])
       const [collapsed, setCollapsed] = React.useState(() => new Set())
+      const [forking, setForking] = React.useState(() => new Set())
+      const [toast, setToast] = React.useState(null)
+      const forkingRef = React.useRef(new Set())
       React.useEffect(() => {
+        forkingRef.current = new Set()
         setCollapsed(new Set())
+        setForking(new Set())
+        setToast(null)
       }, [sessionId])
+      React.useEffect(() => {
+        if (toast === null) return undefined
+        const timer = setTimeout(() => setToast(null), 5000)
+        return () => clearTimeout(timer)
+      }, [toast])
       const projection = React.useMemo(
         () => projectTree(tree.data, sessionId, collapsed, list),
         [tree.data, sessionId, collapsed, list],
@@ -794,6 +862,33 @@ window.__ModuleLoader__.load({
           return next
         })
       }, [])
+      const onForkRow = React.useCallback(async (row) => {
+        const request = rowForkRequest(row)
+        if (request === null) return
+        const key = `${request.sessionId}:${request.atSeq}`
+        // A double click can land before the disabled flag repaints.
+        if (forkingRef.current.has(key)) return
+        forkingRef.current.add(key)
+        setForking((current) => new Set(current).add(key))
+        try {
+          await mutate(request)
+          setToast({ text: t('childCreated'), error: false })
+        } catch (error) {
+          setToast({ text: `${t('requestFailed')}: ${error instanceof Error ? error.message : String(error)}`, error: true })
+        } finally {
+          forkingRef.current.delete(key)
+          setForking((current) => {
+            const next = new Set(current)
+            next.delete(key)
+            return next
+          })
+        }
+      }, [mutate])
+      const portalRoot = realGlobal()?.document?.body ?? null
+      const notice = toast === null || portalRoot === null ? null : ReactDOM.createPortal(
+        React.createElement('div', { className: 'dstt-toast', 'data-error': toast.error || undefined, role: 'status' }, toast.text),
+        portalRoot,
+      )
       const toolbar = React.createElement('div', { className: 'dstt-toolbar' },
         React.createElement('div', { className: 'dstt-toolbarMain' },
           React.createElement('span', { className: 'dstt-title' }, t('treeTitle')),
@@ -818,6 +913,7 @@ window.__ModuleLoader__.load({
                   React.createElement('button', { type: 'button', className: 'dst-button', onClick: tree.reload }, t('retry')),
                 ),
           ),
+          notice,
         )
       }
       const eventColumnWidth = Math.max(236, (projection.maxLane + 1) * 20 + 150)
@@ -841,8 +937,11 @@ window.__ModuleLoader__.load({
                 firstByLane: projection.firstByLane,
                 lastByLane: projection.lastByLane,
                 onToggle,
+                onFork: onForkRow,
+                forking: forking.has(`${row.sessionId}:${row.event.seq}`),
               })),
         ),
+        notice,
       )
     }
 
@@ -1134,7 +1233,10 @@ window.__ModuleLoader__.load({
 
     exports.__test = {
       TreeView,
+      TreeRow,
       projectTree,
+      rowForkRequest,
+      makeMutation,
       UserActionInjector,
       chatNodeKeyFromRow,
       messageTextFromRow,

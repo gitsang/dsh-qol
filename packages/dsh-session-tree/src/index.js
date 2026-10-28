@@ -129,12 +129,16 @@ function requiredSeq(value) {
  * stable Chat row identity. The latter is what the browser actually has in
  * hand; it must never be parsed as a seq because it begins with the
  * Conversation definition-name length.
+ *
+ * The numeric path is validated against the complete log, so a boundary that
+ * names no stored event fails before the route cancels a running Turn or
+ * writes a child Session.
  */
 function eventSeqFromRequest(events, body, field) {
   if (typeof body.chatNodeKey === 'string' && body.chatNodeKey.length > 0) {
     return eventSeqForChatNodeKey(events, body.chatNodeKey)
   }
-  return requiredSeq(body[field])
+  return forkAfterBoundary(events, requiredSeq(body[field]))
 }
 
 async function readJson(request) {
@@ -261,12 +265,9 @@ async function handlePost(ctx, body) {
   const sessionId = requiredSessionId(body.sessionId)
   if (action === 'activate') return activateSession(ctx, sessionId)
   if (action === 'fork') {
-    const snapshot = typeof body.chatNodeKey === 'string' && body.chatNodeKey.length > 0
-      ? await ctx.sessionQuery.readSession(sessionId)
-      : undefined
-    const atSeq = body.atSeq === undefined && body.chatNodeKey === undefined
-      ? undefined
-      : eventSeqFromRequest(snapshot?.events, body, 'atSeq')
+    const bounded = typeof body.chatNodeKey === 'string' && body.chatNodeKey.length > 0 || body.atSeq !== undefined
+    const snapshot = bounded ? await ctx.sessionQuery.readSession(sessionId) : undefined
+    const atSeq = bounded ? eventSeqFromRequest(snapshot?.events, body, 'atSeq') : undefined
     await stopRunningSession(ctx, sessionId)
     const fork = await ctx.sessionController.fork({ sessionId, ...atSeq === undefined ? {} : { atSeq } })
     return { sessionId: fork.sessionId, atSeq: atSeq ?? null, action }

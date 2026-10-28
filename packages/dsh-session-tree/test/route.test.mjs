@@ -161,3 +161,21 @@ test('an unknown Chat row key is rejected before any Host mutation', async () =>
   )
   assert.equal(calls.fork.length, 0)
 })
+
+test('a per-row fork boundary that names no stored event is rejected before cancelling', async () => {
+  const { ctx, calls } = fixture()
+  await assert.rejects(
+    __test.handlePost(ctx, { action: 'fork', sessionId: 'root', atSeq: 999 }),
+    /does not exist/,
+  )
+  assert.equal(calls.cancel.length, 0)
+  assert.equal(calls.fork.length, 0)
+})
+
+test('a per-row fork accepts any durable event, not only a completed Turn', async () => {
+  const { ctx, calls } = fixture()
+  const result = await __test.handlePost(ctx, { action: 'fork', sessionId: 'root', atSeq: 3 })
+  assert.deepEqual(calls.fork, [{ sessionId: 'root', atSeq: 3 }])
+  assert.equal(calls.prompt.length, 0)
+  assert.deepEqual(result, { sessionId: 'child-1', atSeq: 3, action: 'fork' })
+})

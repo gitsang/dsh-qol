@@ -9,6 +9,7 @@ A DSH Web component that adds a dedicated **Trajectory Tree** conversation View,
 - **DSH-native visual language** — the same 30px ledger rows, kind pills, borders, and muted colors as Trajectory. The `Turn N` label has its own narrow first column, so it never overlaps the tree lanes or the kind pill.
 - **Expand / collapse** — a `−/+` node at each side fork folds the whole descendant subtree and reports how many rows are hidden.
 - **Full family** — every Session in the connected family is projected, not only the selected Session's descendants.
+- **Fork from any durable event** — every ledger row carries a branch icon; it forks the row's own Session immediately after the row's own event, so you can branch from a tool call, an injected context message, a compaction, or a mid-Turn assistant step, not just from a user message.
 - **Edit a sent message** — the pencil sits beside the Host's own Copy button on every user message. The Host forks from the event immediately before that Turn, then sends the edited prompt into the new Session.
 - **No Chat renderer replacement** — the component adds two sibling buttons to the native action row and leaves Copy and every other host control intact.
 
@@ -36,15 +37,20 @@ Restart the profile after installing; refresh the browser after UI-only changes.
 
 1. Open a conversation and switch to **Trajectory Tree**.
 2. The Session you opened is shown as the main trunk, even if it was originally created as a fork. Ancestor siblings and the old mainline continuation are side lanes.
-3. To edit a past message: use the pencil beside the native Copy button on a user message. Saving forks the conversation from before that Turn and sends the edited text.
-4. To fork from the latest event of the current branch, use the branch action on a user message.
+3. To branch from any step: every ledger row carries a branch icon on its right edge. Click it to fork **that row's own Session** immediately after **that row's own durable event**, then open the new Session. This works for tool calls, tool results, injected context, compaction, retries, and mid-Turn assistant steps — not only user messages.
+4. To edit a past message: use the pencil beside the native Copy button on a user message. Saving forks the conversation from before that Turn and sends the edited text.
 
 ## Semantics
 
 | Action | Fork boundary | Then |
 | --- | --- | --- |
-| branch action on a user message | that user message's exact event (inclusive) | new Session opens, no prompt |
+| branch icon on a tree row | that row's exact event seq in that row's Session (inclusive) | new Session opens, no prompt |
+| branch action on a user message in Chat | that user message's exact event (inclusive) | new Session opens, no prompt |
 | edit user message | event immediately before the Turn's `turn/start` | forks, restores the source route, sends the edited text |
+
+Rows are interleaved across the whole family, so a row on a side lane or on the `Original mainline` continuation belongs to an ancestor Session. The row action always forks the Session that owns the row, never the Session currently open.
+
+The tree only offers a boundary that names a stored event: the synthetic placeholder row for a branch with no own events yet is disabled. Cutting inside an open Turn is legal — the Host closes the copied prefix with synthetic tool results and `forked` step/turn closers.
 
 The component also cancels the source Session's active Turn before branching by default, so an answer you are replacing stops spending tokens.
 
