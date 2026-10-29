@@ -36,20 +36,23 @@ test('only English and Chinese are accepted; English is the fallback', () => {
   assert.equal(client.__test.normalizeLanguage(undefined), 'en')
 })
 
-test('the component configuration normalizes both stored fields', () => {
+test('the component configuration normalizes every stored field', () => {
   assert.deepEqual(client.__test.normalizeConfig({
     defaultPreset: 'auto',
     reviewLanguage: 'zh',
+    reviewReasonToModel: true,
     autoAvailable: true,
-  }), { defaultPreset: 'auto', reviewLanguage: 'zh', autoAvailable: true })
+  }), { defaultPreset: 'auto', reviewLanguage: 'zh', reviewReasonToModel: true, autoAvailable: true })
   assert.deepEqual(client.__test.normalizeConfig({
     defaultPreset: 'read-only',
     reviewLanguage: 'fr',
+    reviewReasonToModel: 'yes',
     autoAvailable: false,
-  }), { defaultPreset: '', reviewLanguage: 'en', autoAvailable: false })
+  }), { defaultPreset: '', reviewLanguage: 'en', reviewReasonToModel: false, autoAvailable: false })
   assert.deepEqual(client.__test.normalizeConfig(undefined), {
     defaultPreset: '',
     reviewLanguage: 'en',
+    reviewReasonToModel: false,
     autoAvailable: true,
   })
 })
@@ -86,4 +89,47 @@ test('registers a configuration page for this component row', () => {
   assert.equal(registration[1].key, '@gitsang/dsh-qol#experimental-auto-review-enhance')
   assert.equal(registration[1].locale, 'autoReviewEnhance')
   assert.equal(client.__test.CONFIG_PATH, '/experimental-auto-review-enhance/config')
+})
+
+test('both dictionaries carry exactly the same keys', () => {
+  const zh = Object.keys(client.__test.zh).sort()
+  const en = Object.keys(client.__test.en).sort()
+  assert.deepEqual(zh, en)
+  assert.ok(zh.includes('reasonToModel'))
+  assert.ok(zh.includes('reasonToModelHint'))
+})
+
+test('saving writes all three choices in one request body', async () => {
+  const requests = []
+  const original = globalThis.fetch
+  globalThis.fetch = async (path, init) => {
+    requests.push({ path, init })
+    return {
+      ok: true,
+      async json() {
+        return JSON.parse(init.body)
+      },
+    }
+  }
+  try {
+    const saved = await client.__test.writeConfig({
+      defaultPreset: 'auto',
+      reviewLanguage: 'zh',
+      reviewReasonToModel: true,
+    })
+    assert.deepEqual(JSON.parse(requests[0].init.body), {
+      defaultPreset: 'auto',
+      reviewLanguage: 'zh',
+      reviewReasonToModel: true,
+    })
+    assert.equal(requests[0].path, '/experimental-auto-review-enhance/config')
+    assert.deepEqual(saved, {
+      defaultPreset: 'auto',
+      reviewLanguage: 'zh',
+      reviewReasonToModel: true,
+      autoAvailable: true,
+    })
+  } finally {
+    globalThis.fetch = original
+  }
 })

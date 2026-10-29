@@ -1,7 +1,7 @@
 {
   "name": "@gitsang/dsh-experimental-auto-review-enhance",
   "version": "0.1.0",
-  "description": "Use the experimental Auto review preset for new root sessions from its own Plugins configuration page, and choose the language of its denial reasons.",
+  "description": "Use the experimental Auto review preset for new root sessions from its own Plugins configuration page, choose the language of its denial reasons, and optionally return the reviewer reason to the session AI.",
   "license": "MIT",
   "type": "module",
   "main": "src/index.js",

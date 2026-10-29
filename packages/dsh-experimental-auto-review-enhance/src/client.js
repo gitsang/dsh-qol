@@ -1,12 +1,13 @@
 /**
  * Browser half of dsh-experimental-auto-review-enhance.
  *
- * The Host state file owns both choices this component exposes: whether newly
- * created root sessions start in Auto review, and the language of the
- * reviewer's user-visible denial reason. This page is their editor on the
- * component's Plugins row. A row nested inside the @gitsang/dsh-qol bundle has
- * no Settings namespace of its own, so the page reads and writes the Host's
- * same-origin endpoint instead of a generated Config form.
+ * The Host state file owns all three choices this component exposes: whether
+ * newly created root sessions start in Auto review, the language of the
+ * reviewer's user-visible denial reason, and whether that reason also reaches
+ * the session AI. This page is their editor on the component's Plugins row. A
+ * row nested inside the @gitsang/dsh-qol bundle has no Settings namespace of
+ * its own, so the page reads and writes the Host's same-origin endpoint instead
+ * of a generated Config form.
  *
  * The page stages choices and writes them only on Save, matching every other
  * plugin configuration page in DSH.
@@ -42,7 +43,9 @@ window.__ModuleLoader__.load({
       languageHint: '仅影响 Auto review 拒绝时展示给用户的理由；审批协议本身始终保持英文。',
       english: '英文',
       chinese: '中文',
-      summary: '配置 Auto review 新会话默认值与拒绝理由语言',
+      reasonToModel: '向会话 AI 返回拒绝理由',
+      reasonToModelHint: '开启后，Auto review 拒绝调用（或它拒绝后你驳回审批）时，审核理由会追加到该工具的错误结果里，供会话 AI 参考。默认关闭：理由只展示给用户。',
+      summary: '配置 Auto review 新会话默认值、拒绝理由语言及 AI 是否可见理由',
       save: '保存',
       saving: '正在保存…',
       saveFailed: '保存失败，请重试。',
@@ -62,7 +65,9 @@ window.__ModuleLoader__.load({
       languageHint: 'Only changes the reason shown to you when Auto review denies a call; the approval protocol itself stays in English.',
       english: 'English',
       chinese: 'Chinese',
-      summary: 'Configure the Auto review new-session default and denial-reason language',
+      reasonToModel: 'Return the denial reason to the session AI',
+      reasonToModelHint: 'When on, the reviewer reason is appended to the tool error result the session AI sees, both when Auto review denies a call and when you reject the approval prompt it raised. Off by default: the reason is shown only to you.',
+      summary: 'Configure the Auto review new-session default, denial-reason language, and whether the AI sees the reason',
       save: 'Save',
       saving: 'Saving…',
       saveFailed: 'Could not save. Try again.',
@@ -81,13 +86,14 @@ window.__ModuleLoader__.load({
     /**
      * Normalize one configuration response.
      * @param {unknown} value - parsed Host response.
-     * @returns {{defaultPreset:'auto'|'', reviewLanguage:'en'|'zh', autoAvailable:boolean}} config.
+     * @returns {{defaultPreset:'auto'|'', reviewLanguage:'en'|'zh', reviewReasonToModel:boolean, autoAvailable:boolean}} config.
      */
     function normalizeConfig(value) {
       const source = value !== null && typeof value === 'object' ? value : {}
       return {
         defaultPreset: source.defaultPreset === 'auto' ? 'auto' : '',
         reviewLanguage: normalizeLanguage(source.reviewLanguage),
+        reviewReasonToModel: source.reviewReasonToModel === true,
         autoAvailable: source.autoAvailable !== false,
       }
     }
@@ -109,6 +115,7 @@ window.__ModuleLoader__.load({
         body: JSON.stringify({
           defaultPreset: normalized.defaultPreset,
           reviewLanguage: normalized.reviewLanguage,
+          reviewReasonToModel: normalized.reviewReasonToModel,
         }),
       })
       if (!response.ok) throw new Error(`config write failed: ${String(response.status)}`)
@@ -170,7 +177,9 @@ window.__ModuleLoader__.load({
       if (view === 'summary') return t('summary')
 
       const saving = status === 'saving'
-      const dirty = draft.defaultPreset !== current.defaultPreset || draft.reviewLanguage !== current.reviewLanguage
+      const dirty = draft.defaultPreset !== current.defaultPreset
+        || draft.reviewLanguage !== current.reviewLanguage
+        || draft.reviewReasonToModel !== current.reviewReasonToModel
       const autoBlocked = !current.autoAvailable
       const shell = {
         available: status !== 'error',
@@ -264,6 +273,24 @@ window.__ModuleLoader__.load({
           }),
           React.createElement('p', { style: styles.hint }, t('languageHint')),
         ),
+        React.createElement(
+          'div',
+          { style: styles.fieldDivider },
+          React.createElement(
+            'div',
+            { style: styles.toggleRow },
+            React.createElement('span', { style: styles.label }, t('reasonToModel')),
+            React.createElement(Switch, {
+              checked: draft.reviewReasonToModel,
+              disabled: saving,
+              label: t('reasonToModel'),
+              onChange: (checked) => {
+                setDraft((previous) => ({ ...previous, reviewReasonToModel: checked }))
+              },
+            }),
+          ),
+          React.createElement('p', { style: styles.hint }, t('reasonToModelHint')),
+        ),
       )
     }
 
@@ -284,7 +311,7 @@ window.__ModuleLoader__.load({
 
     exports.apply = apply
     exports.inject = inject
-    exports.__test = { normalizeConfig, normalizeLanguage, readConfig, writeConfig, AutoReviewConfig, NS, ROW_KEY, CONFIG_PATH }
+    exports.__test = { normalizeConfig, normalizeLanguage, readConfig, writeConfig, AutoReviewConfig, NS, ROW_KEY, CONFIG_PATH, zh, en }
     return module.exports
   },
 })

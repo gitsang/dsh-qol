@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | `@gitsang/dsh-enter-swap` | Enter 换行，Ctrl/Cmd+Enter 发送。 | |
 | `@gitsang/dsh-no-preview-notice` | 跳过新会话页的版本预览提示。 | |
-| `@gitsang/dsh-experimental-auto-review-enhance` | 在组件自己的插件配置页设置实验性的 Auto review 新会话默认值，并可选择中文拒绝理由。 | |
+| `@gitsang/dsh-experimental-auto-review-enhance` | 在组件自己的插件配置页设置实验性的 Auto review 新会话默认值，并可选择中文拒绝理由、是否把理由返回给会话 AI。 | |
 | `@gitsang/dsh-reset-terminals` | 提供 `/reset-terminals` 和输入框按钮，在切换权限前关闭持久 PTY 会话。 | |
 | `@gitsang/dsh-sidebar-terminal-enhance` | 设置右侧终端的字体族、字号、行高，以及浅色/深色/跟随外观的主体色。 | |
 | `@gitsang/dsh-statusline` | 保留原统计胶囊，并把模型用时拆成首 token 等待与输出时间。 | |
@@ -32,8 +32,9 @@
 和其它行不一致；想保持统一就不要加。
 
 带配置的组件会在 **插件 → @gitsang/dsh-qol** 下各自的行页面提供 **配置** 入口。
-回车键行为、终端字体与主体色、Auto review 新会话默认值与理由语言都在组件
-自己的页面里编辑并保存，不再作为一行注入 **设置 → 通用** 或其它设置页。修改在点
+回车键行为、终端字体与主体色、Auto review 新会话默认值、理由语言以及理由是
+否返回给会话 AI 都在组件自己的页面里编辑并保存，不再作为一行注入 **设置 → 通用**
+或其它设置页。修改在点
 **保存** 前只停留在表单里，离开页面即丢弃。
 
 ## 安装

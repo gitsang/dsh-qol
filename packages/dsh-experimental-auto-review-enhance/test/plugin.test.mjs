@@ -129,24 +129,26 @@ test('the component page enables the Auto default without touching Settings', as
   const initial = await callRoute(routes[0], 'GET');
   assert.deepEqual(initial, {
     status: 200,
-    body: { defaultPreset: '', reviewLanguage: 'en', autoAvailable: true },
+    body: { defaultPreset: '', reviewLanguage: 'en', reviewReasonToModel: false, autoAvailable: true },
   });
   const accepted = await callRoute(routes[0], 'POST', { defaultPreset: 'auto' });
   assert.deepEqual(accepted, {
     status: 200,
-    body: { defaultPreset: 'auto', reviewLanguage: 'en', autoAvailable: true },
+    body: { defaultPreset: 'auto', reviewLanguage: 'en', reviewReasonToModel: false, autoAvailable: true },
   });
   assert.equal(JSON.parse(readFileSync(join(home, 'experimental-auto-review-enhance', 'web.json'), 'utf8')).defaultPreset, 'auto');
   rmSync(home, { recursive: true, force: true });
 });
 
-test('the config endpoint validates both fields and merges partial writes', async () => {
+test('the config endpoint validates every field and merges partial writes', async () => {
   const { ctx, routes, home } = makeContext();
   apply(ctx);
   const invalidDefault = await callRoute(routes[0], 'POST', { defaultPreset: 'read-only' });
   assert.equal(invalidDefault.status, 400);
   const invalidLanguage = await callRoute(routes[0], 'POST', { reviewLanguage: 'fr' });
   assert.equal(invalidLanguage.status, 400);
+  const invalidReasonToModel = await callRoute(routes[0], 'POST', { reviewReasonToModel: 'yes' });
+  assert.equal(invalidReasonToModel.status, 400);
   const malformed = await callRoute(routes[0], 'POST');
   assert.equal(malformed.status, 400);
 
@@ -154,16 +156,22 @@ test('the config endpoint validates both fields and merges partial writes', asyn
   const languageOnly = await callRoute(routes[0], 'POST', { reviewLanguage: 'zh' });
   assert.deepEqual(languageOnly, {
     status: 200,
-    body: { defaultPreset: 'auto', reviewLanguage: 'zh', autoAvailable: true },
+    body: { defaultPreset: 'auto', reviewLanguage: 'zh', reviewReasonToModel: false, autoAvailable: true },
+  });
+  const reasonToModel = await callRoute(routes[0], 'POST', { reviewReasonToModel: true });
+  assert.deepEqual(reasonToModel, {
+    status: 200,
+    body: { defaultPreset: 'auto', reviewLanguage: 'zh', reviewReasonToModel: true, autoAvailable: true },
   });
   const cleared = await callRoute(routes[0], 'POST', { defaultPreset: '' });
   assert.deepEqual(cleared, {
     status: 200,
-    body: { defaultPreset: '', reviewLanguage: 'zh', autoAvailable: true },
+    body: { defaultPreset: '', reviewLanguage: 'zh', reviewReasonToModel: true, autoAvailable: true },
   });
   assert.deepEqual(JSON.parse(readFileSync(join(home, 'experimental-auto-review-enhance', 'web.json'), 'utf8')), {
     defaultPreset: '',
     reviewLanguage: 'zh',
+    reviewReasonToModel: true,
   });
   rmSync(home, { recursive: true, force: true });
 });
@@ -174,7 +182,7 @@ test('the config endpoint refuses Auto while the integration is absent', async (
   const initial = await callRoute(routes[0], 'GET');
   assert.deepEqual(initial, {
     status: 200,
-    body: { defaultPreset: '', reviewLanguage: 'en', autoAvailable: false },
+    body: { defaultPreset: '', reviewLanguage: 'en', reviewReasonToModel: false, autoAvailable: false },
   });
   const rejected = await callRoute(routes[0], 'POST', { defaultPreset: 'auto' });
   assert.equal(rejected.status, 400);
@@ -187,7 +195,7 @@ test('a stored Auto choice degrades to the real default when the integration dis
   await callRoute(routes[0], 'POST', { defaultPreset: 'auto' });
   presets.autoAdmit = false;
   const snapshot = await callRoute(routes[0], 'GET');
-  assert.deepEqual(snapshot.body, { defaultPreset: 'auto', reviewLanguage: 'en', autoAvailable: false });
+  assert.deepEqual(snapshot.body, { defaultPreset: 'auto', reviewLanguage: 'en', reviewReasonToModel: false, autoAvailable: false });
   assert.equal(JSON.parse(readFileSync(join(home, 'experimental-auto-review-enhance', 'web.json'), 'utf8')).defaultPreset, 'auto', 'the choice is remembered, not erased');
   rmSync(home, { recursive: true, force: true });
 });
@@ -260,7 +268,7 @@ test('an unreadable state file falls back to stock behavior', async () => {
   const { ctx, routes } = makeContext({ home });
   apply(ctx);
   const snapshot = await callRoute(routes[0], 'GET');
-  assert.deepEqual(snapshot.body, { defaultPreset: '', reviewLanguage: 'en', autoAvailable: true });
+  assert.deepEqual(snapshot.body, { defaultPreset: '', reviewLanguage: 'en', reviewReasonToModel: false, autoAvailable: true });
   rmSync(home, { recursive: true, force: true });
 });
 
@@ -343,7 +351,7 @@ test('the current state directory wins over the legacy one', async () => {
   const { ctx, routes } = makeContext({ home });
   apply(ctx);
   const snapshot = await callRoute(routes[0], 'GET');
-  assert.deepEqual(snapshot.body, { defaultPreset: '', reviewLanguage: 'en', autoAvailable: true });
+  assert.deepEqual(snapshot.body, { defaultPreset: '', reviewLanguage: 'en', reviewReasonToModel: false, autoAvailable: true });
   rmSync(home, { recursive: true, force: true });
 });
 
@@ -446,4 +454,166 @@ test('disposal restores the LLM stream method', () => {
   assert.notEqual(llm.stream, pristine);
   for (const dispose of ctx.disposers) dispose?.();
   assert.equal(llm.stream, pristine);
+});
+
+/** Invoke the single listener the plugin registered for one event. */
+function listenerFor(listeners, event) {
+  const matching = listeners.filter((listener) => listener.event === event);
+  assert.equal(matching.length, 1, `expected exactly one ${event} listener`);
+  return matching[0].handler;
+}
+
+/** One final reviewer denial as the tool pipeline materializes it. */
+function autoReviewDenialResult(reason) {
+  const message = 'Auto review rejected tool "bash"; its body was not executed';
+  return {
+    isError: true,
+    content: [{ type: 'text', text: `Error: ${message}` }],
+    error: {
+      message,
+      info: {
+        name: 'AutoReviewDeniedError',
+        code: 'AUTO_REVIEW_DENIED',
+        ...reason === undefined ? {} : { reason },
+      },
+    },
+  };
+}
+
+/** One user rejection of the approval prompt Auto review raised. */
+function userRejectedResult() {
+  const message = 'the user rejected tool "bash"';
+  return { isError: true, content: [{ type: 'text', text: `Error: ${message}` }], error: { message } };
+}
+
+/** Accept every downstream post-execute decision. */
+const acceptEverything = async () => ({ kind: 'accept' });
+
+test('the reviewer-reason observers prepend so a claiming answerer cannot hide the event', () => {
+  const { ctx, listeners } = makeContext();
+  apply(ctx);
+  for (const event of ['approval/request', 'tools/post-execute']) {
+    const matching = listeners.filter((listener) => listener.event === event);
+    assert.equal(matching.length, 1, `expected exactly one ${event} listener`);
+    assert.equal(matching[0].options?.prepend, true, `${event} must run before shipped chain participants`);
+  }
+});
+
+test('an opted-in final reviewer denial carries its reason into the model-facing error', async () => {
+  const { ctx, listeners, routes } = makeContext();
+  apply(ctx);
+  await callRoute(routes[0], 'POST', { reviewReasonToModel: true });
+  const postExecute = listenerFor(listeners, 'tools/post-execute');
+  const result = autoReviewDenialResult('Deletes production data');
+  const decision = await postExecute({ name: 'bash', callId: 'call-1' }, result, acceptEverything);
+  assert.equal(decision.kind, 'accept');
+  assert.equal(decision.content.length, 1);
+  assert.equal(
+    decision.content[0].text,
+    'Error: Auto review rejected tool "bash"; its body was not executed\nAuto review\'s reason: Deletes production data',
+  );
+  assert.equal(result.content[0].text.includes('Deletes production data'), false, 'the input result must not be mutated');
+});
+
+test('the reason stays out of model-facing content while the option is off', async () => {
+  const { ctx, listeners } = makeContext();
+  apply(ctx);
+  const postExecute = listenerFor(listeners, 'tools/post-execute');
+  const decision = await postExecute({ name: 'bash', callId: 'call-1' }, autoReviewDenialResult('Deletes production data'), acceptEverything);
+  assert.deepEqual(decision, { kind: 'accept' });
+});
+
+test('unrelated tool failures and other post-execute decisions are untouched', async () => {
+  const { ctx, listeners, routes } = makeContext();
+  apply(ctx);
+  await callRoute(routes[0], 'POST', { reviewReasonToModel: true });
+  const postExecute = listenerFor(listeners, 'tools/post-execute');
+  const syntax = {
+    isError: true,
+    content: [{ type: 'text', text: 'Error: unexpected end of file' }],
+    error: { message: 'unexpected end of file' },
+  };
+  assert.deepEqual(await postExecute({ name: 'bash', callId: 'call-1' }, syntax, acceptEverything), { kind: 'accept' });
+  const blocked = async () => ({ kind: 'block', feedback: [{ type: 'text', text: 'blocked' }] });
+  const denial = autoReviewDenialResult('Deletes production data');
+  assert.deepEqual(await postExecute({ name: 'bash', callId: 'call-2' }, denial, blocked), { kind: 'block', feedback: [{ type: 'text', text: 'blocked' }] });
+});
+
+test('a rejected reviewer prompt returns the reviewer reason to the model', async () => {
+  const { ctx, listeners, routes } = makeContext();
+  apply(ctx);
+  await callRoute(routes[0], 'POST', { reviewReasonToModel: true });
+  const approval = listenerFor(listeners, 'approval/request');
+  const postExecute = listenerFor(listeners, 'tools/post-execute');
+  const outcome = await approval({
+    agent: {},
+    toolName: 'bash',
+    callId: 'call-2',
+    reason: 'Auto review denied tool "bash": Writes to /etc/passwd',
+  }, async () => 'rejected');
+  assert.equal(outcome, 'rejected', 'the plugin must not change the approval outcome');
+  const decision = await postExecute({ name: 'bash', callId: 'call-2' }, userRejectedResult(), acceptEverything);
+  assert.equal(
+    decision.content[0].text,
+    'Error: the user rejected tool "bash"\nAuto review\'s reason: Writes to /etc/passwd',
+  );
+});
+
+test('approval prompts from other askers and reason-less reviewer denials are ignored', async () => {
+  const { ctx, listeners, routes } = makeContext();
+  apply(ctx);
+  await callRoute(routes[0], 'POST', { reviewReasonToModel: true });
+  const approval = listenerFor(listeners, 'approval/request');
+  const postExecute = listenerFor(listeners, 'tools/post-execute');
+  await approval({ agent: {}, toolName: 'bash', callId: 'call-3', reason: 'sandbox requires approval' }, async () => 'rejected');
+  assert.deepEqual(await postExecute({ name: 'bash', callId: 'call-3' }, userRejectedResult(), acceptEverything), { kind: 'accept' });
+  await approval({ agent: {}, toolName: 'bash', callId: 'call-4', reason: 'Auto review denied tool "bash"' }, async () => 'rejected');
+  assert.deepEqual(await postExecute({ name: 'bash', callId: 'call-4' }, userRejectedResult(), acceptEverything), { kind: 'accept' });
+});
+
+test('a remembered prompt is consumed once and never leaks to another call', async () => {
+  const { ctx, listeners, routes } = makeContext();
+  apply(ctx);
+  await callRoute(routes[0], 'POST', { reviewReasonToModel: true });
+  const approval = listenerFor(listeners, 'approval/request');
+  const postExecute = listenerFor(listeners, 'tools/post-execute');
+  await approval({ agent: {}, toolName: 'bash', callId: 'call-5', reason: 'Auto review denied tool "bash": Writes to /etc/passwd' }, async () => 'rejected');
+  assert.deepEqual(await postExecute({ name: 'bash', callId: 'call-6' }, userRejectedResult(), acceptEverything), { kind: 'accept' });
+  const first = await postExecute({ name: 'bash', callId: 'call-5' }, userRejectedResult(), acceptEverything);
+  assert.match(first.content[0].text, /Writes to \/etc\/passwd/);
+  assert.deepEqual(await postExecute({ name: 'bash', callId: 'call-5' }, userRejectedResult(), acceptEverything), { kind: 'accept' });
+});
+
+test('cancelled calls never receive a reviewer reason', async () => {
+  const { ctx, listeners, routes } = makeContext();
+  apply(ctx);
+  await callRoute(routes[0], 'POST', { reviewReasonToModel: true });
+  const approval = listenerFor(listeners, 'approval/request');
+  const postExecute = listenerFor(listeners, 'tools/post-execute');
+  await approval({ agent: {}, toolName: 'bash', callId: 'call-7', reason: 'Auto review denied tool "bash": Writes to /etc/passwd' }, async () => 'cancelled');
+  const aborted = {
+    isError: true,
+    content: [{ type: 'text', text: 'Error: tool call was cancelled' }],
+    error: { message: 'tool call was cancelled', code: 'ABORTED_BEFORE_DISPATCH' },
+  };
+  assert.deepEqual(await postExecute({ name: 'bash', callId: 'call-7' }, aborted, acceptEverything), { kind: 'accept' });
+});
+
+test('a call the user allows at the reviewer prompt is not annotated', async () => {
+  const { ctx, listeners, routes } = makeContext();
+  apply(ctx);
+  await callRoute(routes[0], 'POST', { reviewReasonToModel: true });
+  const approval = listenerFor(listeners, 'approval/request');
+  const postExecute = listenerFor(listeners, 'tools/post-execute');
+  await approval({ agent: {}, toolName: 'bash', callId: 'call-8', reason: 'Auto review denied tool "bash": Writes to /tmp/x' }, async () => 'allowed-once');
+  const success = { isError: false, content: [{ type: 'text', text: 'wrote 12 bytes' }], value: { ok: true } };
+  assert.deepEqual(await postExecute({ name: 'bash', callId: 'call-8' }, success, acceptEverything), { kind: 'accept' });
+});
+
+test('a denial without a reviewer sentence keeps the stock model-facing error', async () => {
+  const { ctx, listeners, routes } = makeContext();
+  apply(ctx);
+  await callRoute(routes[0], 'POST', { reviewReasonToModel: true });
+  const postExecute = listenerFor(listeners, 'tools/post-execute');
+  assert.deepEqual(await postExecute({ name: 'bash', callId: 'call-9' }, autoReviewDenialResult(), acceptEverything), { kind: 'accept' });
 });

@@ -19,19 +19,27 @@
  *     whole `permission` row fail to activate at boot;
  *   - `auto` only exists while the Auto review integration is live.
  *
- * So this plugin does three narrow things, all reversible:
+ * So this plugin does four narrow things, all reversible:
  *
  *  1. On `session/created` (prepended, so it runs before the permission
  *     service pins its own default) it switches genuinely fresh root sessions
  *     to `auto`. It also wraps `pinInitialPermission` for determinism.
  *  2. Exposes one same-origin config endpoint for the component page: the
- *     Auto-review new-session default and the reviewer reason language.
+ *     Auto-review new-session default, the reviewer reason language, and
+ *     whether the reviewer's reason may also reach the session AI.
  *  3. Appends a language directive to the Auto review classifier's system
  *     prompt when Chinese is requested. The JSON approval protocol itself
  *     stays in English.
+ *  4. When the user opts in, extends the model-facing error of a call the
+ *     reviewer denied with the reviewer's own sentence. The shipped
+ *     integration deliberately keeps that sentence out of model context, so
+ *     the plugin re-adds it through two public seams: `approval/request`
+ *     remembers the reason of a pending reviewer prompt, and
+ *     `tools/post-execute` appends it to that call's error content. The
+ *     structured denial identity the UI reads is left untouched.
  *
- * The Auto/not-Auto choice and the optional reviewer language live in a small
- * per-profile JSON file under
+ * The Auto/not-Auto choice, the optional reviewer language and the AI
+ * visibility choice live in a small per-profile JSON file under
  * `$DSH_HOME/experimental-auto-review-enhance/<profile>.json`. The official
  * `permission.defaultPreset` is never touched, so the composition always
  * boots and there is no second source of truth.
@@ -76,6 +84,18 @@ const ZH_REASON_INSTRUCTION = `
 USER_VISIBLE_LANGUAGE
 When the JSON object includes a "reason" member, write that reason in Simplified Chinese (简体中文). The reason is shown directly to the user in an approval prompt or a denied tool card. Keep every JSON member name, risk value and decision value exactly as specified above; do not translate the protocol, and do not add any member the protocol does not allow.`;
 
+/** Structured error identity the shipped reviewer stamps on a final denial. */
+const AUTO_REVIEW_DENIED = { name: 'AutoReviewDeniedError', code: 'AUTO_REVIEW_DENIED' };
+
+/** How the shipped reviewer opens the approval prompt it raises for a denial. */
+const AUTO_REVIEW_ASK_PREFIX = 'Auto review denied tool "';
+
+/** Longest reviewer sentence appended to a model-facing error. */
+const MAX_REVIEW_REASON_LENGTH = 400;
+
+/** Most pending reviewer prompts remembered at once. */
+const MAX_PENDING_REVIEW_REASONS = 32;
+
 /** Marks a service instance this plugin already wrapped. */
 const WRAPPED = Symbol.for('dsh-experimental-auto-review-enhance/wrapped');
 
@@ -113,6 +133,78 @@ function withReviewLanguage(options, language) {
     ? options.system.replace(marker, `${ZH_REASON_INSTRUCTION}${marker}`)
     : `${options.system}${ZH_REASON_INSTRUCTION}`;
   return { ...options, system };
+}
+
+/**
+ * Normalize one reviewer sentence for a model-facing error line: flatten any
+ * line breaks, trim, and cap the length. A blank value becomes `undefined` so
+ * callers simply omit it.
+ *
+ * @param value - the reviewer's free-form `reason`.
+ * @returns the flattened sentence, or `undefined` when nothing usable remains.
+ */
+function normalizeReviewReason(value) {
+  if (typeof value !== 'string') return undefined;
+  const text = value.replace(/\s+/g, ' ').trim();
+  if (text === '') return undefined;
+  return text.length <= MAX_REVIEW_REASON_LENGTH
+    ? text
+    : `${text.slice(0, MAX_REVIEW_REASON_LENGTH - 1)}…`;
+}
+
+/**
+ * The reviewer sentence carried by a final Auto review denial result.
+ *
+ * The shipped integration exposes it only as `error.info.reason` — durable and
+ * user-visible, never model-facing — so append its reader to the model-facing
+ * content is the one thing the AI-visibility option changes.
+ *
+ * @param result - one settled tool result.
+ * @returns the reviewer sentence, or `undefined` for every other failure.
+ */
+function reviewReasonOfDenial(result) {
+  const info = result?.error?.info;
+  if (info?.name !== AUTO_REVIEW_DENIED.name || info?.code !== AUTO_REVIEW_DENIED.code) return undefined;
+  return normalizeReviewReason(info.reason);
+}
+
+/**
+ * The reviewer sentence carried by the approval prompt Auto review raises when
+ * a reviewer denial falls back to human approval (the `ask` policy).
+ *
+ * @param reason - the approval request's audited reason.
+ * @param toolName - the tool the approval request is about.
+ * @returns the reviewer sentence, or `undefined` for every other asker.
+ */
+function reviewReasonOfAsk(reason, toolName) {
+  if (typeof reason !== 'string' || typeof toolName !== 'string') return undefined;
+  const prefix = `${AUTO_REVIEW_ASK_PREFIX}${toolName}"`;
+  if (!reason.startsWith(prefix)) return undefined;
+  const rest = reason.slice(prefix.length);
+  if (!rest.startsWith(': ')) return undefined;
+  return normalizeReviewReason(rest.slice(2));
+}
+
+/**
+ * Append one reviewer sentence to the model-facing content of a failed call,
+ * keeping every existing block and adding no other field.
+ *
+ * @param content - the content blocks the AI would otherwise see.
+ * @param reason - the normalized reviewer sentence.
+ * @returns a new content array with the sentence on its last text block.
+ */
+function withReviewerReason(content, reason) {
+  const note = `\nAuto review's reason: ${reason}`;
+  const blocks = Array.isArray(content) ? [...content] : [];
+  for (let index = blocks.length - 1; index >= 0; index -= 1) {
+    const block = blocks[index];
+    if (block?.type === 'text' && typeof block.text === 'string') {
+      blocks[index] = { ...block, text: `${block.text}${note}` };
+      return blocks;
+    }
+  }
+  blocks.push({ type: 'text', text: note.slice(1) });
+  return blocks;
 }
 
 /** Current state directory; a renamed package must not silently drop a saved choice. */
@@ -173,6 +265,11 @@ function readState(ctx) {
 /** The configured reviewer language; English is the safe default. */
 function readReviewLanguage(ctx) {
   return readStateRecord(ctx).reviewLanguage === 'zh' ? 'zh' : 'en';
+}
+
+/** Whether the reviewer's sentence should also reach the session AI. */
+function readReviewReasonToModel(ctx) {
+  return readStateRecord(ctx).reviewReasonToModel === true;
 }
 
 /** Persist one state record atomically; failures are logged only. */
@@ -262,6 +359,7 @@ function configSnapshot(ctx, presets) {
   return {
     defaultPreset: readState(ctx) ? AUTO_PRESET : '',
     reviewLanguage: readReviewLanguage(ctx),
+    reviewReasonToModel: readReviewReasonToModel(ctx),
     autoAvailable: autoAvailable(presets),
   };
 }
@@ -350,6 +448,12 @@ export function apply(ctx) {
               }
               record.reviewLanguage = body.reviewLanguage;
             }
+            if (Object.hasOwn(body, 'reviewReasonToModel')) {
+              if (typeof body.reviewReasonToModel !== 'boolean') {
+                throw new TypeError('reviewReasonToModel must be a boolean');
+              }
+              record.reviewReasonToModel = body.reviewReasonToModel;
+            }
             if (!writeStateRecord(ctx, record)) throw new Error('could not save the component configuration');
             respondJson(response, 200, configSnapshot(ctx, presets));
             return;
@@ -417,6 +521,66 @@ export function apply(ctx) {
       return;
     }
     adopt(session, fresh);
+  }, { prepend: true });
+
+  // 2) Optionally return the reviewer's own sentence to the session AI.
+  //
+  // The shipped integration keeps that sentence out of model-facing content on
+  // purpose: a final denial exposes it only as `error.info.reason`, and a
+  // reviewer denial under the `ask` policy becomes an approval prompt whose
+  // reason is never copied into the rejection the AI sees. Two public events
+  // are enough to add it back when the user opts in:
+  //
+  //   - `approval/request` remembers the reviewer sentence of a pending
+  //     prompt, keyed by the tool call it is about;
+  //   - `tools/post-execute` appends the remembered sentence — or the one the
+  //     final denial carries — to that call's model-facing error content.
+  //
+  // Both listeners prepend for one reason: they only observe and pass the
+  // chain through, while the shipped answerers and post-policy listeners may
+  // claim the event without calling `next()`. The web client answers approvals
+  // through the forwarded `approval/request` listener that claims its request,
+  // so an inner listener would never see it.
+  //
+  // Only content is extended. `error.info` keeps the structured denial
+  // identity the UI localizes, and no other call is touched.
+  const pendingReviewReasons = new Map();
+
+  ctx.on('approval/request', (request, next) => {
+    try {
+      const reason = reviewReasonOfAsk(request?.reason, request?.toolName);
+      const callId = request?.callId;
+      if (reason !== undefined && typeof callId === 'string') {
+        if (pendingReviewReasons.size >= MAX_PENDING_REVIEW_REASONS) {
+          const oldest = pendingReviewReasons.keys().next();
+          if (!oldest.done) pendingReviewReasons.delete(oldest.value);
+        }
+        pendingReviewReasons.set(callId, reason);
+      }
+    } catch (error) {
+      log(ctx, 'warn', `could not remember the reviewer reason (${describeError(error)})`);
+    }
+    return next();
+  }, { prepend: true });
+
+  ctx.on('tools/post-execute', async (exec, result, next) => {
+    const decision = await next();
+    try {
+      const callId = exec?.callId;
+      const pending = typeof callId === 'string' ? pendingReviewReasons.get(callId) : undefined;
+      if (typeof callId === 'string') pendingReviewReasons.delete(callId);
+      const reason = reviewReasonOfDenial(result) ?? pending;
+      if (reason === undefined) return decision;
+      if (!readReviewReasonToModel(ctx)) return decision;
+      if (decision?.kind !== 'accept') return decision;
+      if (result?.isError !== true) return decision;
+      if (typeof result?.error?.code === 'string' && result.error.code.startsWith('ABORTED')) return decision;
+      const content = Array.isArray(decision.content) ? decision.content : result.content;
+      return { ...decision, content: withReviewerReason(content, reason) };
+    } catch (error) {
+      log(ctx, 'warn', `could not append the reviewer reason (${describeError(error)})`);
+      return decision;
+    }
   }, { prepend: true });
 
   ctx.effect(() => {

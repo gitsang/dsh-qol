@@ -10,7 +10,7 @@ A quality-of-life bundle for [DeepSeek Harness](https://github.com/deepseek-ai/d
 | --- | --- | --- |
 | `@gitsang/dsh-enter-swap` | Enter inserts a newline; Ctrl/Cmd+Enter sends. | |
 | `@gitsang/dsh-no-preview-notice` | Skips the versioned preview welcome notice on the new-session page. | |
-| `@gitsang/dsh-experimental-auto-review-enhance` | Sets the experimental Auto review preset as the new-session default from its own Plugins page, with an optional Chinese denial-reason language. | |
+| `@gitsang/dsh-experimental-auto-review-enhance` | Sets the experimental Auto review preset as the new-session default from its own Plugins page, with an optional Chinese denial-reason language and an optional AI-visible denial reason. | |
 | `@gitsang/dsh-reset-terminals` | `/reset-terminals` plus a composer button that closes persistent PTY sessions before a permission change. | |
 | `@gitsang/dsh-sidebar-terminal-enhance` | Sets the sidebar terminal's font family, size and line height, and its light/dark/follow-appearance palette. | |
 | `@gitsang/dsh-statusline` | Keeps the shipped statistics pills and splits model time into first-token wait and decode. | |
@@ -33,8 +33,8 @@ that one row look different again; leave both out to keep the list uniform.
 
 Components that carry settings provide a **Configure** action on their own row
 page under **Plugins → @gitsang/dsh-qol**. Enter-key behavior, terminal font and palette, the Auto review new-session
-default, and its reason language are edited and saved there; they are not injected as rows into **Settings → General** or other Settings
-pages. Edits stay staged until **Save**, and the form is discarded when you
+default, its reason language, and whether the reviewer reason reaches the session AI are edited and saved there; they are not injected as
+rows into **Settings → General** or other Settings pages. Edits stay staged until **Save**, and the form is discarded when you
 leave the page.
 
 ## Install
