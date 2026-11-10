@@ -11,7 +11,7 @@ A DSH Web component that adds a dedicated **Trajectory Tree** conversation View,
 - **Expand / collapse** — a `−/+` node at each side fork folds the whole descendant subtree and reports how many rows are hidden.
 - **Full family** — every Session in the connected family is projected, not only the selected Session's descendants.
 - **Fork from any durable event** — every ledger row carries a branch icon; it forks the row's own Session immediately after that row's last durable event, so you can branch from a tool exchange, an injected context message, a compaction, or a mid-Turn assistant step, not just from a user message.
-- **Edit a sent message** — the pencil sits beside the Host's own Copy button on every user message. The Host forks from the event immediately before that Turn, then sends the edited prompt into the new Session.
+- **Edit a sent message** — the pencil sits beside the Host's own Copy button on every user message. The Host forks from the event immediately before that Turn, clears the prompts that cut inherited in the child's queue, then sends the edited prompt as the child's first Turn.
 - **No Chat renderer replacement** — the component adds two sibling buttons to the native action row and leaves Copy and every other host control intact.
 
 The source Session is never rewritten. Every branch is an ordinary native DSH Session created with `session.fork`.
@@ -39,7 +39,7 @@ Restart the profile after installing; refresh the browser after UI-only changes.
 1. Open a conversation and switch to **Trajectory Tree**.
 2. The Session you opened is shown as the main trunk, even if it was originally created as a fork. Ancestor siblings and the ancestor's own later events are side lanes.
 3. To branch from any step: every ledger row carries a branch icon on its right edge. Click it to fork **that row's own Session** immediately after **that row's last durable event**, then open the new Session. This works for tool calls (after their result), injected context, compaction, retries, and mid-Turn assistant steps — not only user messages.
-4. To edit a past message: use the pencil beside the native Copy button on a user message. Saving forks the conversation from before that Turn and sends the edited text.
+4. To edit a past message: use the pencil beside the native Copy button on a user message. Saving forks the conversation from before that Turn and sends the edited text as the new branch's first message.
 
 ## Semantics
 
@@ -47,7 +47,9 @@ Restart the profile after installing; refresh the browser after UI-only changes.
 | --- | --- | --- |
 | branch icon on a tree row | that row's last event seq in that row's Session (inclusive); for a folded tool row that is its result | new Session opens, no prompt |
 | branch action on a user message in Chat | that user message's exact event (inclusive) | new Session opens, no prompt |
-| edit user message | event immediately before the Turn's `turn/start` | forks, restores the source route, sends the edited text |
+| edit user message | event immediately before the Turn's `turn/start`; a steering prompt queued mid-Turn cuts just before its admission instead | forks, retires the prompts that cut inherited, restores the source route, sends the edited text as the first Turn |
+
+A prompt is recorded twice: the Agent first admits it to the durable inbox with an `agent/inbox/spliced` insertion, and the Turn's start claims that occurrence before the `user/message` is published. A fork of an inclusive prefix copies the admission but not the claim, so a plain cut before `turn/start` leaves the child believing the ORIGINAL prompt is still queued: it would claim and run that text as its own first Turn, and the edit sent next would only be delivered afterwards. Editing therefore retires the inherited occurrences in the child (through `session.updateQueue`) before prompting, so the edited text really is the branch's first Turn. A Host that exposes no queue mutation falls back to the deepest cut that inherits no pending prompt at all.
 
 Rows are interleaved across the whole family, so a row on a side lane belongs to an ancestor Session. The row action always forks the Session that owns the row, never the Session currently open.
 
@@ -67,6 +69,7 @@ The component also cancels the source Session's active Turn before branching by 
 ## Limitations
 
 - Editing preserves **text** only. Images and files attached to the original user message are not re-uploaded into the new branch.
+- Editing an older message also drops the prompts that were still queued after it on that branch: they belong to the future being replaced.
 - Conversation branching does not roll back workspace files, commands, Git state, processes, or other tool side effects.
 - The tree route reads complete Session logs; very large families are capped at 100 Sessions in one response.
 - `dsh` is pre-release software. This package targets the public Session Controller, Session Query, and Workspace services exposed by DSH `0.2.x`.

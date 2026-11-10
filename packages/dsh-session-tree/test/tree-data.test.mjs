@@ -10,7 +10,9 @@ import {
   eventSeqForChatNodeKey,
   extractOwnEvents,
   forkAfterBoundary,
+  inboxAdmissionSeq,
   lastEventSeq,
+  pendingInboxAt,
   previewSource,
   textFromContent,
 } from '../src/tree-data.js'
@@ -65,6 +67,196 @@ test('editForkBoundary cuts immediately before the turn that owns the user messa
 test('editForkBoundary rejects non-user and prefixed-only events', () => {
   assert.throws(() => editForkBoundary(log(), 10), /not a user message/)
   assert.throws(() => editForkBoundary(log(), 999), /does not exist/)
+})
+
+/**
+ * A verbatim-shape log of a queued prompt, matching the durable event order a
+ * real Session records: the prompt is admitted to the Agent inbox before its
+ * Turn opens, and the Turn claims it with a removing splice.
+ */
+function queuedLog() {
+  const inbox = (seq, target, data) => ({ seq, type: 'agent/inbox/spliced', time: seq, data: { target, ...data } })
+  const queued = (seq, id, text) => ({
+    id,
+    content: [{ type: 'text', text }],
+    source: { kind: 'user', rpcId: `rpc-${id}` },
+    role: 'user',
+  })
+  const posted = (seq, id, text, turn) => ({
+    seq,
+    type: 'user/message',
+    time: seq,
+    data: { id, content: [{ type: 'text', text }], source: { kind: 'user', rpcId: `rpc-${id}` }, turn },
+  })
+  return [
+    { seq: 0, type: 'session/end-seed', time: 0, data: {} },
+    { seq: 1, type: 'turn/start', time: 1, data: { turn: 1 } },
+    inbox(2, 'next-turn', { start: 0, removedCount: 1 }),
+    { seq: 3, type: 'step/start', time: 3, data: { turn: 1, step: 1 } },
+    posted(4, 'first-question', 'first question', 1),
+    assistant(5, 'first answer', 1),
+    { seq: 6, type: 'turn/end', time: 6, data: { turn: 1, reason: { kind: 'completed' } } },
+    // The prompt is queued while the Agent is idle...
+    inbox(7, 'next-turn', { start: 0, inserted: [queued(7, 'second-question', 'second question')] }),
+    // ...and a successor is queued behind it, still before any Turn opens.
+    inbox(8, 'next-turn', { start: 1, inserted: [queued(8, 'third-question', 'third question')] }),
+    { seq: 9, type: 'turn/start', time: 9, data: { turn: 2 } },
+    inbox(10, 'next-turn', { start: 0, removedCount: 1 }),
+    { seq: 11, type: 'step/start', time: 11, data: { turn: 2, step: 1 } },
+    posted(12, 'second-question', 'second question', 2),
+    assistant(13, 'second answer', 2),
+    { seq: 14, type: 'turn/end', time: 14, data: { turn: 2, kind: 'completed' } },
+  ]
+}
+
+test('editForkBoundary cuts before the owning Turn and reports the inherited inbox work', () => {
+  const boundary = editForkBoundary(queuedLog(), 12)
+  // The published rule: fork before the Turn that contains the message (the
+  // Turn opens at 9), so Turn 1 stays in the child.
+  assert.equal(boundary.atSeq, 8)
+  assert.equal(boundary.turnStartSeq, 9)
+  assert.equal(boundary.userText, 'second question')
+  // That prefix ends with the edited prompt's own admission (7) and the
+  // successor queued behind it (8), which the child would otherwise claim and
+  // run before the edit; the Host retires exactly these.
+  assert.deepEqual(boundary.danglingInbox, ['second-question', 'third-question'])
+  // Without retiring them the fork has to rewind past Turn 1 too.
+  assert.equal(boundary.cleanAtSeq, 6)
+})
+
+test('editForkBoundary cuts mid-Turn for a steering message so the earlier steps survive', () => {
+  // A steering prompt is admitted while its Turn is still running, so cutting
+  // before `turn/start` would also discard the steps that already ran. The
+  // boundary moves up to the admission instead, which is later, not earlier.
+  const events = [
+    { seq: 0, type: 'session/end-seed', time: 0, data: {} },
+    { seq: 1, type: 'turn/start', time: 1, data: { turn: 1 } },
+    { seq: 2, type: 'agent/inbox/spliced', time: 2, data: { target: 'next-turn', start: 0, removedCount: 1 } },
+    { seq: 3, type: 'step/start', time: 3, data: { turn: 1, step: 1 } },
+    { seq: 4, type: 'user/message', time: 4, data: { id: 'a', content: [{ type: 'text', text: 'open' }], source: { kind: 'user' } } },
+    { seq: 5, type: 'assistant/message', time: 5, data: { turn: 1, step: 1, message: { content: [{ type: 'text', text: 'working' }] } } },
+    {
+      seq: 6,
+      type: 'agent/inbox/spliced',
+      time: 6,
+      data: {
+        target: 'next-step',
+        start: 0,
+        inserted: [{ id: 'b', content: [{ type: 'text', text: 'steer' }], source: { kind: 'user' }, role: 'user' }],
+      },
+    },
+    { seq: 7, type: 'step/start', time: 7, data: { turn: 1, step: 2 } },
+    { seq: 8, type: 'agent/inbox/spliced', time: 8, data: { target: 'next-step', start: 0, removedCount: 1 } },
+    { seq: 9, type: 'user/message', time: 9, data: { id: 'b', content: [{ type: 'text', text: 'steer' }], source: { kind: 'user' } } },
+  ]
+  const boundary = editForkBoundary(events, 9)
+  // Before the Turn opened would be 0; the steering admission at 6 is later,
+  // so the boundary keeps step 1 and everything before it.
+  assert.equal(boundary.atSeq, 5)
+  assert.equal(boundary.turnStartSeq, 1)
+  assert.deepEqual(boundary.danglingInbox, [])
+  assert.equal(boundary.cleanAtSeq, 5)
+})
+
+test('editForkBoundary reports dangling queued prompts separately from the clean cut', () => {
+  // Two prompts queued back to back: editing the third keeps Turns 1-2 and
+  // names exactly the occurrences the child must not claim.
+  const events = [
+    { seq: 0, type: 'session/end-seed', time: 0, data: {} },
+    { seq: 1, type: 'turn/start', time: 1, data: { turn: 1 } },
+    { seq: 2, type: 'agent/inbox/spliced', time: 2, data: { target: 'next-turn', start: 0, removedCount: 1 } },
+    { seq: 3, type: 'step/start', time: 3, data: { turn: 1, step: 1 } },
+    { seq: 4, type: 'user/message', time: 4, data: { id: 'a', content: [{ type: 'text', text: 'first' }], source: { kind: 'user' } } },
+    { seq: 5, type: 'turn/end', time: 5, data: { turn: 1, reason: { kind: 'completed' } } },
+    { seq: 6, type: 'agent/inbox/spliced', time: 6, data: { target: 'next-turn', start: 0, inserted: [{ id: 'b', content: [], source: { kind: 'user' } }] } },
+    { seq: 7, type: 'agent/inbox/spliced', time: 7, data: { target: 'next-turn', start: 1, inserted: [{ id: 'c', content: [], source: { kind: 'user' } }] } },
+    { seq: 8, type: 'turn/start', time: 8, data: { turn: 2 } },
+    { seq: 9, type: 'agent/inbox/spliced', time: 9, data: { target: 'next-turn', start: 0, removedCount: 1 } },
+    { seq: 10, type: 'user/message', time: 10, data: { id: 'b', content: [{ type: 'text', text: 'second' }], source: { kind: 'user' } } },
+    { seq: 11, type: 'turn/end', time: 11, data: { turn: 2, reason: { kind: 'completed' } } },
+    { seq: 12, type: 'turn/start', time: 12, data: { turn: 3 } },
+    { seq: 13, type: 'agent/inbox/spliced', time: 13, data: { target: 'next-turn', start: 0, removedCount: 1 } },
+    { seq: 14, type: 'user/message', time: 14, data: { id: 'c', content: [{ type: 'text', text: 'third' }], source: { kind: 'user' } } },
+  ]
+  const boundary = editForkBoundary(events, 14)
+  // Cut just before Turn 3 opens (12), keeping Turns 1 and 2 whole.
+  assert.equal(boundary.atSeq, 11)
+  // `c` was queued at 7 and never claimed before this Turn, so it is dangling.
+  assert.deepEqual(boundary.danglingInbox, ['c'])
+  // The fully clean cut rewinds past Turn 2, losing it.
+  assert.equal(boundary.cleanAtSeq, 5)
+})
+
+test('pendingInboxAt replays admission and claim splices to an empty inbox', () => {
+  const events = queuedLog()
+  assert.deepEqual([...pendingInboxAt(events, 6).keys()], [])
+  assert.deepEqual([...pendingInboxAt(events, 7).keys()], ['second-question'])
+  assert.deepEqual([...pendingInboxAt(events, 8).keys()], ['second-question', 'third-question'])
+  // Turn 2 claims only the first queued message, so the successor stays pending
+  // even after the Turn closed. That is exactly the leftover a fork at the Turn
+  // boundary would hand to the child as its own first Turn.
+  assert.deepEqual([...pendingInboxAt(events, 13).keys()], ['third-question'])
+  assert.deepEqual([...pendingInboxAt(events, 14).keys()], ['third-question'])
+})
+
+test('inboxAdmissionSeq finds the splice that first admitted a message', () => {
+  const events = queuedLog()
+  assert.equal(inboxAdmissionSeq(events, 'second-question'), 7)
+  assert.equal(inboxAdmissionSeq(events, 'third-question'), 8)
+  assert.equal(inboxAdmissionSeq(events, 'first-question'), null)
+  assert.equal(inboxAdmissionSeq(events, undefined), null)
+})
+
+test('editForkBoundary rewinds before a pending steering message admitted mid-Turn', () => {
+  // A steering prompt is admitted into `next-step` while the Turn runs, so the
+  // edit must cut before that reservation rather than before the Turn start.
+  const events = [
+    { seq: 0, type: 'session/end-seed', time: 0, data: {} },
+    { seq: 1, type: 'turn/start', time: 1, data: { turn: 1 } },
+    { seq: 2, type: 'agent/inbox/spliced', time: 2, data: { target: 'next-turn', start: 0, removedCount: 1 } },
+    { seq: 3, type: 'step/start', time: 3, data: { turn: 1, step: 1 } },
+    { seq: 4, type: 'user/message', time: 4, data: { id: 'a', content: [{ type: 'text', text: 'open' }], source: { kind: 'user' } } },
+    { seq: 5, type: 'assistant/message', time: 5, data: { turn: 1, step: 1, message: { content: [{ type: 'text', text: 'working' }] } } },
+    {
+      seq: 6,
+      type: 'agent/inbox/spliced',
+      time: 6,
+      data: {
+        target: 'next-step',
+        start: 0,
+        inserted: [{
+          id: 'b',
+          content: [{ type: 'text', text: 'steer' }],
+          source: { kind: 'user', rpcId: 'rpc-b' },
+          role: 'user',
+        }],
+      },
+    },
+    { seq: 7, type: 'step/start', time: 7, data: { turn: 1, step: 2 } },
+    { seq: 8, type: 'agent/inbox/spliced', time: 8, data: { target: 'next-step', start: 0, removedCount: 1 } },
+    { seq: 9, type: 'user/message', time: 9, data: { id: 'b', content: [{ type: 'text', text: 'steer' }], source: { kind: 'user' } } },
+  ]
+  const boundary = editForkBoundary(events, 9)
+  // Cutting at 5 would copy a reservation that the child still holds pending;
+  // the boundary stops before the steering admission at 6.
+  assert.equal(boundary.atSeq, 5)
+  assert.equal(boundary.turnStartSeq, 1)
+})
+
+test('editForkBoundary keeps the previous turn boundary for logs without inbox splices', () => {
+  // Legacy logs never recorded `agent/inbox/spliced`; the Turn boundary is the
+  // only durable cut that excludes the prompt.
+  const boundary = editForkBoundary(log(), 9)
+  assert.equal(boundary.atSeq, 6)
+})
+
+test('editForkBoundary refuses when the prefix would be empty', () => {
+  const events = [
+    { seq: 0, type: 'agent/inbox/spliced', time: 0, data: { target: 'next-turn', start: 0, inserted: [{ id: 'a', content: [], source: { kind: 'user' } }] } },
+    { seq: 1, type: 'turn/start', time: 1, data: { turn: 1 } },
+    { seq: 2, type: 'user/message', time: 2, data: { id: 'a', content: [{ type: 'text', text: 'only' }], source: { kind: 'user' } } },
+  ]
+  assert.throws(() => editForkBoundary(events, 2), /no forkable prefix/)
 })
 
 test('forkAfterBoundary validates the exact seq exists', () => {

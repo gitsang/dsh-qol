@@ -361,13 +361,106 @@ export function eventSeqForChatNodeKey(events, key) {
 }
 
 /**
- * Compute the fork boundary immediately before the Turn containing a user
- * message. Native `fork` takes an inclusive prefix, so the boundary is the
- * event before that Turn's `turn/start`.
+ * Replay the durable Agent inbox up to one inclusive seq.
+ *
+ * A prompt is not published as `user/message` when it is submitted: the Agent
+ * first records it as an `agent/inbox/spliced` insertion, and a later splice
+ * claims it by removing it again. A forked Session resumes from that durable
+ * projection, so a prefix that ends with a still-pending insertion makes the
+ * child claim and emit that message as its own first Turn. Replaying the
+ * splices is therefore the only way to know which prompts a fork boundary
+ * would drag back into the child.
+ *
+ * The fold mirrors the Agent Loop's own projection: every splice applies
+ * `start`/`removedCount`/`inserted` to its target queue, and `outcome`
+ * changes only claim bookkeeping, never the pending list.
+ *
+ * @param {readonly object[]} events - complete source log.
+ * @param {number} maxSeq - inclusive last seq to fold.
+ * @returns {Map<string, {id: string, seq: number}>} pending message by id, valued with the seq that inserted it.
+ */
+export function pendingInboxAt(events, maxSeq) {
+  const queues = { 'next-turn': [], 'next-step': [] }
+  for (const event of Array.isArray(events) ? events : []) {
+    if (event === null || typeof event !== 'object' || event.type !== 'agent/inbox/spliced') continue
+    if (!Number.isSafeInteger(event.seq) || event.seq > maxSeq) continue
+    const data = event.data
+    const queue = queues[data?.target]
+    if (queue === undefined) continue
+    const start = Number.isSafeInteger(data.start) && data.start >= 0 ? Math.min(data.start, queue.length) : queue.length
+    const removedCount = Number.isSafeInteger(data.removedCount) && data.removedCount > 0
+      ? Math.min(data.removedCount, queue.length - start)
+      : 0
+    if (removedCount > 0) queue.splice(start, removedCount)
+    const inserted = Array.isArray(data.inserted) ? data.inserted : []
+    const entries = []
+    for (const message of inserted) {
+      if (typeof message?.id !== 'string' || message.id === '') continue
+      entries.push({ id: message.id, seq: event.seq })
+    }
+    if (entries.length > 0) queue.splice(start, 0, ...entries)
+  }
+  const pending = new Map()
+  for (const queue of Object.values(queues)) {
+    for (const entry of queue) pending.set(entry.id, entry)
+  }
+  return pending
+}
+
+/**
+ * Find the seq of the inbox splice that last admitted one durable message.
+ *
+ * A prompt can be admitted more than once: a canceled claim leaves the queue
+ * untouched, so the Agent re-inserts the message on the next wake. The latest
+ * admission is the one that produced the published `user/message`, so it is
+ * the reservation an edit has to cut before.
+ *
+ * @param {readonly object[]} events - complete source log.
+ * @param {unknown} messageId - durable `user/message` id.
+ * @returns {number|null} latest admission seq, or null when the log records none.
+ */
+export function inboxAdmissionSeq(events, messageId) {
+  if (typeof messageId !== 'string' || messageId === '') return null
+  let latest = null
+  for (const event of Array.isArray(events) ? events : []) {
+    if (event === null || typeof event !== 'object' || event.type !== 'agent/inbox/spliced') continue
+    if (!Number.isSafeInteger(event.seq)) continue
+    const inserted = event.data?.inserted
+    if (!Array.isArray(inserted)) continue
+    if (inserted.some((message) => message?.id === messageId)) latest = event.seq
+  }
+  return latest
+}
+
+/**
+ * Compute the fork boundary immediately before one user message was submitted.
+ *
+ * Native `fork` takes an inclusive prefix, so the boundary is the last event
+ * the edit must not drag along. The documented rule is "before the Turn that
+ * contains the message", but that is not sufficient on its own: a queued
+ * prompt is admitted to the durable inbox *before* its Turn opens, so a cut
+ * before `turn/start` copies the original message as still-pending inbox work.
+ * A child resumed from that prefix claims the old prompt first, replays it as
+ * its own Turn, and only then delivers the edit — and it also drags along any
+ * prompt queued behind it.
+ *
+ * Because the maximum prefix is what the user asked for ("branch before this
+ * Turn"), the boundary is the later of two cuts:
+ *   - just before the owning `turn/start`, which keeps every completed Turn;
+ *   - just before this message's inbox admission, which only matters for a
+ *     steering message admitted mid-Turn, where it keeps the steps the Turn
+ *     already ran.
+ *
+ * A prefix chosen that way can still end with unclaimed prompts — the original
+ * message itself, and anything queued behind it. They are reported as
+ * `danglingInbox` so the Host can retire them in the child before prompting;
+ * that keeps the earlier Turns intact instead of rewinding past them.
+ * `cleanAtSeq` is the deepest rewind that leaves no pending inbox work at all,
+ * for a Host that cannot retire inbox items.
  *
  * @param {readonly object[]} events - complete source log.
  * @param {number} userSeq - exact `user/message` event sequence.
- * @returns {{atSeq: number, turnStartSeq: number, userText: string, userEvent: object}}
+ * @returns {{atSeq: number, cleanAtSeq: number, danglingInbox: string[], turnStartSeq: number, userText: string, userEvent: object}}
  */
 export function editForkBoundary(events, userSeq) {
   const list = Array.isArray(events) ? events : []
@@ -385,12 +478,32 @@ export function editForkBoundary(events, userSeq) {
     }
   }
   if (turnIndex < 0) throw new TypeError('user message is not inside a Turn')
-  if (turnIndex === 0) throw new TypeError('the first Turn has no forkable prefix')
-  const atSeq = list[turnIndex - 1].seq
-  if (!Number.isSafeInteger(atSeq) || atSeq < 0) throw new TypeError('no forkable prefix before this Turn')
+  const turnStartSeq = list[turnIndex].seq
+  const beforeTurn = turnIndex === 0 ? null : list[turnIndex - 1].seq
+  const admissionSeq = inboxAdmissionSeq(list, userEvent.data?.id)
+  const beforeAdmission = admissionSeq === null || admissionSeq <= 0 ? null : admissionSeq - 1
+  let atSeq
+  if (beforeTurn === null && beforeAdmission === null) throw new TypeError('the first Turn has no forkable prefix')
+  atSeq = Math.max(beforeTurn ?? -1, beforeAdmission ?? -1)
+  if (!Number.isSafeInteger(atSeq) || atSeq < 0) throw new TypeError('the first Turn has no forkable prefix')
+  // Unclaimed prompts inside the prefix would be claimed and emitted by the
+  // child as its own Turns; the Host retires them after forking.
+  const danglingInbox = [...pendingInboxAt(list, atSeq).keys()]
+  let cleanAtSeq = atSeq
+  for (;;) {
+    let earliest = null
+    for (const entry of pendingInboxAt(list, cleanAtSeq).values()) {
+      if (earliest === null || entry.seq < earliest) earliest = entry.seq
+    }
+    if (earliest === null) break
+    if (earliest <= 0) throw new TypeError('no forkable prefix before this message')
+    cleanAtSeq = earliest - 1
+  }
   return {
     atSeq,
-    turnStartSeq: list[turnIndex].seq,
+    cleanAtSeq,
+    danglingInbox,
+    turnStartSeq,
     userText: textFromContent(userEvent.data?.content),
     userEvent,
   }

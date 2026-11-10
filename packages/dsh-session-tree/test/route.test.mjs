@@ -11,13 +11,27 @@ const events = [
   { seq: 5, type: 'turn/end', time: 5, data: { turn: 1, reason: { kind: 'completed' } } },
 ]
 
-function fixture() {
-  const calls = { fork: [], prompt: [], selectModel: [], cancel: [] }
+/**
+ * Build the fixture Host.
+ *
+ * `fork` and `updateQueue` mutate a simulated child log so the post-retirement
+ * verification reads what a real forked Session would contain: the inherited
+ * prefix plus an `agent/inbox/spliced` removal for every retired occurrence.
+ * Passing `parentEvents` overrides the source log the route reads.
+ */
+function fixture(parentEvents = events) {
+  const calls = { fork: [], prompt: [], selectModel: [], cancel: [], updateQueue: [] }
+  let childEvents = null
   const ctx = {
     agents: { get: () => undefined },
     sessionController: {
       async fork(request) {
         calls.fork.push(request)
+        const prefix = parentEvents.filter((event) => event.seq <= request.atSeq)
+        childEvents = [
+          ...prefix,
+          { seq: request.atSeq + 1, type: 'session/end-seed', time: 0, data: { inherited: true } },
+        ]
         return { sessionId: 'child-1' }
       },
       async prompt(request, signal) {
@@ -30,14 +44,26 @@ function fixture() {
         calls.selectModel.push(request)
         return { selected: request }
       },
+      async updateQueue(request) {
+        calls.updateQueue.push(request)
+        const tail = childEvents[childEvents.length - 1].seq
+        childEvents = [
+          ...childEvents,
+          { seq: tail + 1, type: 'agent/inbox/spliced', time: 0, data: { target: 'next-turn', start: 0, removedCount: 1 } },
+        ]
+        return { accepted: true }
+      },
       cancel(request) {
         calls.cancel.push(request)
         return { accepted: true }
       },
     },
     sessionQuery: {
-      async readSession() {
-        return { session: { id: 'root' }, inheritedEventCount: 0, events }
+      async readSession(sessionId) {
+        if (sessionId === 'child-1' && childEvents !== null) {
+          return { session: { id: 'child-1' }, inheritedEventCount: 0, events: childEvents }
+        }
+        return { session: { id: 'root' }, inheritedEventCount: 0, events: parentEvents }
       },
     },
   }
@@ -178,4 +204,102 @@ test('a per-row fork accepts any durable event, not only a completed Turn', asyn
   assert.deepEqual(calls.fork, [{ sessionId: 'root', atSeq: 3 }])
   assert.equal(calls.prompt.length, 0)
   assert.deepEqual(result, { sessionId: 'child-1', atSeq: 3, action: 'fork' })
+})
+
+/** A log where the edited prompt was queued into the inbox before its Turn. */
+function queuedEvents() {
+  return [
+    { seq: 0, type: 'session/end-seed', time: 0, data: {} },
+    { seq: 1, type: 'turn/start', time: 1, data: { turn: 1 } },
+    { seq: 2, type: 'agent/inbox/spliced', time: 2, data: { target: 'next-turn', start: 0, removedCount: 1 } },
+    { seq: 3, type: 'step/start', time: 3, data: { turn: 1, step: 1 } },
+    { seq: 4, type: 'user/message', time: 4, data: { id: 'old', content: [{ type: 'text', text: 'old prompt' }], source: { kind: 'user' } } },
+    { seq: 5, type: 'turn/end', time: 5, data: { turn: 1, reason: { kind: 'completed' } } },
+    {
+      seq: 6,
+      type: 'agent/inbox/spliced',
+      time: 6,
+      data: { target: 'next-turn', start: 0, inserted: [{ id: 'edited', content: [{ type: 'text', text: 'old prompt' }], source: { kind: 'user' }, role: 'user' }] },
+    },
+    {
+      seq: 7,
+      type: 'agent/inbox/spliced',
+      time: 7,
+      data: { target: 'next-turn', start: 1, inserted: [{ id: 'queued', content: [{ type: 'text', text: 'later' }], source: { kind: 'user' }, role: 'user' }] },
+    },
+    { seq: 8, type: 'turn/start', time: 8, data: { turn: 2 } },
+    { seq: 9, type: 'agent/inbox/spliced', time: 9, data: { target: 'next-turn', start: 0, removedCount: 1 } },
+    { seq: 10, type: 'user/message', time: 10, data: { id: 'edited', content: [{ type: 'text', text: 'old prompt' }], source: { kind: 'user' } } },
+    { seq: 11, type: 'turn/end', time: 11, data: { turn: 2, reason: { kind: 'completed' } } },
+  ]
+}
+
+test('edit forks before its Turn and retires the inherited inbox occurrences in the child', async () => {
+  const { ctx, calls } = fixture(queuedEvents())
+  const result = await __test.handlePost(ctx, {
+    action: 'edit',
+    sessionId: 'root',
+    chatNodeKey: '13:input-messageedited',
+    text: 'rewritten',
+    stopPrevious: true,
+  })
+  // The fork keeps Turn 1: it cuts at the event before the Turn that owns the
+  // edited message.
+  assert.deepEqual(calls.fork, [{ sessionId: 'root', atSeq: 7 }])
+  // Both the edited message and the prompt queued behind it are still pending
+  // in that prefix, so the child pins them away before it is prompted.
+  assert.deepEqual(calls.updateQueue, [
+    { sessionId: 'child-1', itemId: 'edited', action: { kind: 'remove' } },
+    { sessionId: 'child-1', itemId: 'queued', action: { kind: 'remove' } },
+  ])
+  assert.equal(calls.prompt.length, 1)
+  assert.deepEqual(calls.prompt[0].content, [{ type: 'text', text: 'rewritten' }])
+  assert.deepEqual(result, { sessionId: 'child-1', atSeq: 7, action: 'edit' })
+})
+
+test('edit falls back to the clean cut when the Host exposes no queue mutation', async () => {
+  const { ctx, calls } = fixture()
+  delete ctx.sessionController.updateQueue
+  const events = queuedEvents()
+  ctx.sessionQuery.readSession = async () => ({ session: { id: 'root' }, inheritedEventCount: 0, events })
+  const result = await __test.handlePost(ctx, {
+    action: 'edit',
+    sessionId: 'root',
+    chatNodeKey: '13:input-messageedited',
+    text: 'rewritten',
+    stopPrevious: true,
+  })
+  // Without a way to retire the inherited occurrences, keeping the prefix at 7
+  // would let the child replay the original prompt first. Cutting at the last
+  // event before anything was queued (5) keeps the inbox empty instead.
+  assert.deepEqual(calls.fork, [{ sessionId: 'root', atSeq: 5 }])
+  assert.equal(calls.prompt.length, 1)
+  assert.deepEqual(calls.prompt[0].content, [{ type: 'text', text: 'rewritten' }])
+  assert.deepEqual(result, { sessionId: 'child-1', atSeq: 5, action: 'edit' })
+})
+
+test('an edit fails loudly instead of replaying the original prompt when retirement is ineffective', async () => {
+  // A Host whose removal silently does nothing leaves the inherited occurrence
+  // pending in the child. Prompting then would let the child claim the ORIGINAL
+  // text first, so the action must fail rather than pretend it succeeded.
+  const { ctx, calls } = fixture(queuedEvents())
+  ctx.sessionController.updateQueue = async (request) => {
+    calls.updateQueue.push(request)
+    return { accepted: true }
+  }
+  await assert.rejects(
+    __test.handlePost(ctx, {
+      action: 'edit',
+      sessionId: 'root',
+      chatNodeKey: '13:input-messageedited',
+      text: 'rewritten',
+      stopPrevious: true,
+    }),
+    (error) => {
+      assert.match(error.message, /still holds 2 inherited queued message/)
+      assert.equal(error.childSessionId, 'child-1')
+      return true
+    },
+  )
+  assert.equal(calls.prompt.length, 0)
 })

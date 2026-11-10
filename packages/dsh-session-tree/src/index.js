@@ -17,6 +17,7 @@ import {
   extractOwnEvents,
   forkAfterBoundary,
   lastEventSeq,
+  pendingInboxAt,
 } from './tree-data.js'
 
 export const name = 'session-tree'
@@ -219,15 +220,92 @@ async function promptFreshBranch(ctx, childId, text, clientTimeZone) {
   }, lifetime.signal)
 }
 
-async function createBranch(ctx, source, atSeq, body, promptText) {
+/**
+ * Retire the pending inbox work a fork copied into its child.
+ *
+ * A prompt reaches the durable log twice: once as an `agent/inbox/spliced`
+ * admission, then again as the claimed `user/message`. A fork of an inclusive
+ * prefix therefore copies the admission but not the claim, so the child
+ * resumes believing that prompt is still queued. It would claim and run the
+ * ORIGINAL text as its own first Turn, and the edit sent after it would only
+ * be delivered later. Removing those occurrences leaves the child with an
+ * empty inbox, so the edited prompt opens its first Turn.
+ *
+ * The result is verified by replaying the child's own log rather than by
+ * trusting each removal: a `remove` that reports "not pending" is a success
+ * (the occurrence is already gone), while one that fails for another reason
+ * leaves the child able to replay the original prompt.
+ *
+ * @param {object} ctx - Host context carrying the Session Controller.
+ * @param {string} childId - freshly forked Session.
+ * @param {readonly string[]} messageIds - inherited occurrences to retire.
+ * @returns {Promise<string[]>} inherited message ids still pending in the child.
+ */
+async function retireInheritedInbox(ctx, childId, messageIds) {
+  if (!Array.isArray(messageIds) || messageIds.length === 0) return []
+  if (typeof ctx.sessionController.updateQueue !== 'function') return [...messageIds]
+  for (const itemId of messageIds) {
+    try {
+      await ctx.sessionController.updateQueue({ sessionId: childId, itemId, action: { kind: 'remove' } })
+    } catch (error) {
+      ctx.logger?.warn?.(`session-tree: inherited inbox item ${itemId} was not removable in ${childId}: ${errorText(error)}`)
+    }
+  }
+  const snapshot = await ctx.sessionQuery.readSession(childId)
+  const events = snapshot?.events
+  const tail = Array.isArray(events) && events.length > 0 ? events[events.length - 1]?.seq : -1
+  if (!Number.isSafeInteger(tail)) return [...messageIds]
+  return [...pendingInboxAt(events, tail).keys()]
+}
+
+/**
+ * Describe the source of an edit/retry branch.
+ *
+ * The fork cut and the inbox occurrences that prefix drags along are resolved
+ * together, once, so `createBranch` can act without re-reading the log.
+ *
+ * Two cuts are possible. `atSeq` is the documented one — before the Turn that
+ * owns the message — and keeps every completed Turn; it needs the inherited
+ * inbox occurrences retired in the child. `cleanAtSeq` is the deepest cut that
+ * needs no retirement, used when this Host exposes no way to retire them.
+ *
+ * @param {object} ctx - Host context.
+ * @param {string} sessionId - source Session.
+ * @param {readonly object[]} events - complete source log.
+ * @param {{atSeq: number, cleanAtSeq?: number, danglingInbox?: readonly string[]}} boundary - `editForkBoundary` result.
+ * @returns {{sessionId: string, events: readonly object[], atSeq: number, retireInbox: string[]}}
+ */
+function branchSource(ctx, sessionId, events, boundary) {
+  const canRetire = typeof ctx.sessionController.updateQueue === 'function'
+  const dangling = Array.isArray(boundary?.danglingInbox) ? [...boundary.danglingInbox] : []
+  const cleanAtSeq = Number.isSafeInteger(boundary?.cleanAtSeq) ? boundary.cleanAtSeq : boundary.atSeq
+  const keepHistory = canRetire || dangling.length === 0
+  return {
+    sessionId,
+    events,
+    atSeq: keepHistory ? boundary.atSeq : cleanAtSeq,
+    retireInbox: keepHistory ? dangling : [],
+  }
+}
+
+async function createBranch(ctx, source, body, promptText) {
   if (body.stopPrevious !== false) await stopRunningSession(ctx, source.sessionId)
-  const fork = await ctx.sessionController.fork({ sessionId: source.sessionId, atSeq })
+  const fork = await ctx.sessionController.fork({ sessionId: source.sessionId, atSeq: source.atSeq })
   const childId = fork.sessionId
   try {
+    const stillPending = await retireInheritedInbox(ctx, childId, source.retireInbox)
+    if (stillPending.length > 0) {
+      // Prompting now would let the child claim the inherited copy first and
+      // replay the original message, so the edit would arrive a Turn late.
+      const error = new Error(`the forked Session still holds ${stillPending.length} inherited queued message(s); re-open the branch from before them`)
+      error.childSessionId = childId
+      throw error
+    }
     await inheritModel(ctx, childId, sourceModelSelection(source.events))
     if (promptText !== undefined) await promptFreshBranch(ctx, childId, promptText, body.clientTimeZone)
-    return { sessionId: childId, atSeq, action: body.action }
+    return { sessionId: childId, atSeq: source.atSeq, action: body.action }
   } catch (error) {
+    if (typeof error.childSessionId === 'string') throw error
     const wrapped = new Error(errorText(error))
     wrapped.childSessionId = childId
     throw wrapped
@@ -276,11 +354,11 @@ async function handlePost(ctx, body) {
   if (action === 'edit') {
     if (typeof body.text !== 'string' || body.text.trim() === '') throw new TypeError('text must be a non-empty string')
     const boundary = editForkBoundary(snapshot.events, eventSeqFromRequest(snapshot.events, body, 'eventSeq'))
-    return createBranch(ctx, { sessionId, events: snapshot.events }, boundary.atSeq, body, body.text)
+    return createBranch(ctx, branchSource(ctx, sessionId, snapshot.events, boundary), body, body.text)
   }
   if (action === 'retry') {
     const boundary = editForkBoundary(snapshot.events, eventSeqFromRequest(snapshot.events, body, 'eventSeq'))
-    return createBranch(ctx, { sessionId, events: snapshot.events }, boundary.atSeq, body, boundary.userText)
+    return createBranch(ctx, branchSource(ctx, sessionId, snapshot.events, boundary), body, boundary.userText)
   }
   if (action === 'fork-last') {
     const atSeq = lastEventSeq(snapshot.events)
