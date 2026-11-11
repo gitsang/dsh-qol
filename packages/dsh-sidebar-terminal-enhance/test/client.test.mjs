@@ -89,9 +89,14 @@ const {
   ensureRemoteStack,
   normalizeStreaming,
   remoteFaceUrl,
+  PREVIEW_AMBIGUOUS,
+  PREVIEW_CJK,
+  PREVIEW_CJK_PUNCTUATION,
+  PREVIEW_DIGITS,
   PREVIEW_GLYPHS,
   PREVIEW_ICONS,
   PREVIEW_LOWERCASE,
+  PREVIEW_PUNCTUATION,
   PREVIEW_UPPERCASE,
   ROW_KEY,
   STORAGE_KEY,
@@ -389,14 +394,51 @@ test('CSS is scoped to the terminal surface and configuration page', () => {
   assert.match(CSS, /dshTerminalFont_preview/)
   assert.match(CSS, /\[data-sidebar-terminal\]/)
   assert.doesNotMatch(CSS, /^body\{/)
-  assert.equal(PREVIEW_LOWERCASE, '0123456789 abcdefghijklmnopqrstuvwxyz')
+})
+
+test('preview shows digits, ASCII, CJK, ambiguous glyphs, punctuation, and Nerd Font icons', () => {
+  assert.equal(PREVIEW_DIGITS, '0123456789')
+  assert.equal(PREVIEW_LOWERCASE, 'abcdefghijklmnopqrstuvwxyz')
   assert.equal(PREVIEW_UPPERCASE, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ')
+  // CJK is the only line that has to reach the fallback chain.
+  assert.equal(PREVIEW_CJK, '中国制造，惠及全球')
+  // Ambiguous-width glyphs are grouped; the sample's trailing space is kept
+  // verbatim.
+  assert.equal(PREVIEW_AMBIGUOUS, 'oO08  iIlL1  g9qCGQ  ~-+=> ')
+  assert.equal(PREVIEW_PUNCTUATION, `. : , ; ' " ( ! ? ) + - * / =`)
+  // Line seven is its own Chinese-punctuation sample, not a token-for-token
+  // translation of line six. The request's trailing space is kept verbatim.
+  assert.equal(PREVIEW_CJK_PUNCTUATION, '。 ： ， ； ‘ ” （ ！ ？ ） 《 》 ￥ ')
+  assert.deepEqual(PREVIEW_CJK_PUNCTUATION.trimEnd().split(' '), [
+    '。', '：', '，', '；', '‘', '”', '（', '！', '？', '）', '《', '》', '￥',
+  ])
+  // Lock the code points so a visually similar substitute cannot slip in:
+  // ASCII `"` for `”`, half-width `¥` for `￥`, or `＋`/`－` for `《`/`》`.
+  assert.deepEqual(
+    [...PREVIEW_CJK_PUNCTUATION.trimEnd().replaceAll(' ', '')].map((glyph) => glyph.codePointAt(0)),
+    [0x3002, 0xff1a, 0xff0c, 0xff1b, 0x2018, 0x201d, 0xff08, 0xff01, 0xff1f, 0xff09, 0x300a, 0x300b, 0xffe5],
+  )
+  // The only ASCII on the line is the single spaces between samples and the
+  // one trailing space; every other code point is one of the expected CJK ones.
+  assert.match(PREVIEW_CJK_PUNCTUATION, /^\S+( \S+)* $/)
+  assert.match(PREVIEW_CJK_PUNCTUATION, /^[。：，；‘”（！？）《》￥ ]+$/)
   assert.deepEqual(PREVIEW_ICONS, ['\ue627', '\ue73c', '\uf323', '\ue620', '\ue738', '\ued0d'])
-  assert.equal(PREVIEW_GLYPHS, `${PREVIEW_LOWERCASE}\n${PREVIEW_UPPERCASE}\n${PREVIEW_ICONS.join('  ')}`)
-  // Every preview line must stay inside the printable ASCII range, and the
-  // icon line must be exactly the six requested private-use code points.
-  assert.match(PREVIEW_LOWERCASE + PREVIEW_UPPERCASE, /^[0-9a-zA-Z ]+$/u)
+  // The icon line must be exactly the six requested private-use code points.
   assert.equal(PREVIEW_ICONS.join(''), '\ue627\ue73c\uf323\ue620\ue738\ued0d')
+  assert.equal(PREVIEW_GLYPHS, [
+    '0123456789',
+    'abcdefghijklmnopqrstuvwxyz',
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+    '中国制造，惠及全球',
+    'oO08  iIlL1  g9qCGQ  ~-+=> ',
+    `. : , ; ' " ( ! ? ) + - * / =`,
+    '。 ： ， ； ‘ ” （ ！ ？ ） 《 》 ￥ ',
+    '\ue627  \ue73c  \uf323  \ue620  \ue738  \ued0d',
+  ].join('\n'))
+  // The preview is `white-space: pre`; newlines separate samples and a stray
+  // carriage return would insert an extra blank line.
+  assert.equal(PREVIEW_GLYPHS.split('\n').length, 8)
+  assert.doesNotMatch(PREVIEW_GLYPHS, /\r/)
 })
 
 

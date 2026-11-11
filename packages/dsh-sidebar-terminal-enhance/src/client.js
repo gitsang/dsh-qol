@@ -59,14 +59,38 @@ window.__ModuleLoader__.load({
     const SIZE_MAX = 32
     const LINE_HEIGHT_MIN = 0.9
     const LINE_HEIGHT_MAX = 2
-    /** Preview line one: digits and lowercase ASCII. */
-    const PREVIEW_LOWERCASE = '0123456789 abcdefghijklmnopqrstuvwxyz'
-    /** Preview line two: uppercase ASCII. */
+    /** Preview line one: digits. */
+    const PREVIEW_DIGITS = '0123456789'
+    /** Preview line two: lowercase ASCII. */
+    const PREVIEW_LOWERCASE = 'abcdefghijklmnopqrstuvwxyz'
+    /** Preview line three: uppercase ASCII. */
     const PREVIEW_UPPERCASE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    /** Preview line three: Nerd Font private-use code points, one per glyph. */
+    /** Preview line four: CJK, so the fallback chain for Chinese text is visible. */
+    const PREVIEW_CJK = '中国制造，惠及全球'
+    /** Preview line five: ambiguous-width and easily confused glyphs. */
+    const PREVIEW_AMBIGUOUS = 'oO08  iIlL1  g9qCGQ  ~-+=> '
+    /** Preview line six: punctuation used in shells and code. */
+    const PREVIEW_PUNCTUATION = `. : , ; ' " ( ! ? ) + - * / =`
+    /**
+     * Preview line seven: Chinese punctuation marks and the full-width yuan
+     * sign, one sample per space-separated slot. It is not a token-for-token
+     * translation of line six: it exercises the CJK glyphs that a coding font
+     * may substitute from another face (quotes, angle brackets, ￥).
+     */
+    const PREVIEW_CJK_PUNCTUATION = '。 ： ， ； ‘ ” （ ！ ？ ） 《 》 ￥ '
+    /** Preview line eight: Nerd Font private-use code points, one per glyph. */
     const PREVIEW_ICONS = Object.freeze(['\ue627', '\ue73c', '\uf323', '\ue620', '\ue738', '\ued0d'])
     /** Every preview line, newline-separated because the preview is `white-space: pre`. */
-    const PREVIEW_GLYPHS = `${PREVIEW_LOWERCASE}\n${PREVIEW_UPPERCASE}\n${PREVIEW_ICONS.join('  ')}`
+    const PREVIEW_GLYPHS = [
+      PREVIEW_DIGITS,
+      PREVIEW_LOWERCASE,
+      PREVIEW_UPPERCASE,
+      PREVIEW_CJK,
+      PREVIEW_AMBIGUOUS,
+      PREVIEW_PUNCTUATION,
+      PREVIEW_CJK_PUNCTUATION,
+      PREVIEW_ICONS.join('  '),
+    ].join('\n')
 
     const zh = {
       fontSection: '字体',
@@ -1512,9 +1536,14 @@ window.__ModuleLoader__.load({
       withSelectedFamily,
       CSS,
       COLOR_STORAGE_KEY,
+      PREVIEW_AMBIGUOUS,
+      PREVIEW_CJK,
+      PREVIEW_CJK_PUNCTUATION,
+      PREVIEW_DIGITS,
       PREVIEW_GLYPHS,
       PREVIEW_ICONS,
       PREVIEW_LOWERCASE,
+      PREVIEW_PUNCTUATION,
       PREVIEW_UPPERCASE,
       ROW_KEY,
       STORAGE_KEY,
